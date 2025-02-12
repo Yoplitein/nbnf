@@ -1,0 +1,9 @@
+[package]
+name = "nbnf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "1.0.95", features = ["backtrace"] }
+nom = "8.0.0"
+nom-language = "0.1.0"
