@@ -6,7 +6,7 @@ use nom::branch::alt;
 use nom::bytes::complete::{is_not, tag, take_while, take_while1};
 use nom::combinator::{eof, map, map_res, not, opt, recognize, verify};
 use nom::error::{ErrorKind, FromExternalError};
-use nom::multi::{many0_count, many1, many1_count};
+use nom::multi::{many0_count, many1, many1_count, separated_list1};
 use nom::sequence::terminated;
 use nom::{Finish, Parser};
 use nom_language::error::VerboseError;
@@ -47,7 +47,7 @@ pub fn parse_grammar(input: &str) -> anyhow::Result<Grammar> {
 type PResult<'a, T> = nom::IResult<&'a str, T, VerboseError<&'a str>>;
 
 fn top(input: &str) -> PResult<Grammar> {
-	let (input, (rules, ..)) = (many1(rule), whitespace(true), eof).parse(input)?;
+	let (input, (rules, ..)) = (many1(rule), whitespace(Linebreak::Included, Whitespace::Optional), eof).parse(input)?;
 	let top_rule = rules
 		.first()
 		.map(|(name, _)| name.clone())
@@ -58,95 +58,80 @@ fn top(input: &str) -> PResult<Grammar> {
 }
 
 fn rule(input: &str) -> PResult<(String, Rule)> {
-	let (input, _) = whitespace(true).parse(input)?;
+	let (input, _) = whitespace(Linebreak::Included, Whitespace::Optional).parse(input)?;
 	let (input, rule_name) = identifier.parse(input)?;
 
-	let (input, _) = opt(whitespace(false)).parse(input)?;
+	let (input, _) = whitespace(Linebreak::Excluded, Whitespace::Optional).parse(input)?;
 	let (input, _) = tag("=").parse(input)?;
-	let (input, _) = opt(whitespace(false)).parse(input)?;
-
-	let (input, rule) = rule_body.parse(input)?;
-
-	let (input, _) = opt(whitespace(false)).parse(input)?;
+	let (input, _) = whitespace(Linebreak::Excluded, Whitespace::Optional).parse(input)?;
+	let (input, rule) = rule_atoms.parse(input)?;
+	let (input, _) = whitespace(Linebreak::Excluded, Whitespace::Optional).parse(input)?;
 	let (input, _) = rule_end.parse(input)?;
 
 	Ok((input, (rule_name, rule)))
 }
 
 fn rule_end(input: &str) -> PResult<()> {
-	map(alt((tag("\n"), eof)), |_| ()).parse(input)
-}
-
-fn rule_body(input: &str) -> PResult<Rule> {
-	map(
-		many1((
-			alt((
-				map(identifier, Rule::Rule),
-				map(literal, Rule::Literal),
-			)),
-			alt((whitespace(false), rule_end)),
-		)),
-		|mut xs| {
-			if xs.len() == 1 {
-				xs.pop().unwrap_or_else(|| unreachable!()).0
-			} else {
-				Rule::Group(xs.into_iter().map(|v| v.0).collect())
-			}
-		},
-	)
-	.parse(input)
-}
-
-fn literal(input: &str) -> PResult<Literal> {
-	/* fn inner(char: bool) -> impl for<'a> Fn(&'a str) -> PResult<&'a str> {
-		let quote = if char {
-			"'"
-		} else {
-			"\""
+	macro_rules! map_unit {
+		($parser:expr) => {
+			map($parser, |_| ())
 		};
-		move |input: &str| -> PResult<&str> {
-			let body = recognize(many1_count(alt((
-				dbg_dmp(map(recognize(not(tag(quote))), |v| dbg!(v)), "1"),
-				dbg_dmp(map(recognize((tag("\\"), tag(quote))), |v| dbg!(v)), "2"),
-			))));
-			map((
-				dbg_dmp(map(tag(quote), |v| dbg!(v)), "3"),
-				dbg_dmp(map(body, |v| dbg!(v)), "4"),
-				dbg_dmp(map(tag(quote), |v| dbg!(v)), "5"),
-			), |(_, v, _)| v).parse(input)
-		}
 	}
 	
 	alt((
-		map_res(inner(true), |v| {
-			let mut chars = v.chars();
-			let Some(char) = chars.next() else {
-				return Err(todo!("empty char literal"))
-			};
-			let None = chars.next() else {
-				// TODO: fold 
-				return Err(todo!("char literal with more than one character"))
-			};
-			Ok(Literal::Char(char))
-		}),
-		map(inner(false), |v| Literal::String(v.to_string())),
-	)).parse(input) */
-	
+		map_unit!(whitespace(Linebreak::Excluded, Whitespace::Required)),
+		map_unit!(tag("\n")),
+		// map_unit!(peek),
+		map_unit!(eof),
+	)).parse(input)
+}
+
+fn rule_atom(input: &str) -> PResult<Rule> {
+	alt((
+		map(identifier, Rule::Rule),
+		map(literal, Rule::Literal),
+		rule_group,
+	)).parse(input)
+}
+
+fn rule_atoms(input: &str) -> PResult<Rule> {
+	map(separated_list1(
+		whitespace(Linebreak::Excluded, Whitespace::Required),
+		rule_atom,
+	), |mut xs| {
+		if xs.len() == 1 {
+			xs.pop().unwrap_or_else(|| unreachable!())
+		} else {
+			Rule::Group(xs)
+		}
+	}).parse(input)
+}
+
+fn rule_group(input: &str) -> PResult<Rule> {
+	let (input, _) = whitespace(Linebreak::Excluded, Whitespace::Optional).parse(input)?;
+	let (input, _) = tag("(").parse(input)?;
+	let (input, _) = whitespace(Linebreak::Excluded, Whitespace::Optional).parse(input)?;
+	let (input, body) = rule_atoms.parse(input)?;
+	let (input, _) = whitespace(Linebreak::Excluded, Whitespace::Optional).parse(input)?;
+	let (input, _) = tag(")").parse(input)?;
+	Ok((input, body))
+}
+
+fn literal(input: &str) -> PResult<Literal> {
 	let input_start = input;
-	let (input, quote) = alt((
-		tag("'"),
-		tag("\""),
-	)).parse(input)?;
-	let Some(quote_char) = quote.chars().next() else { unreachable!() };
+	let (input, quote) = alt((tag("'"), tag("\""))).parse(input)?;
+	let Some(quote_char) = quote.chars().next() else {
+		unreachable!()
+	};
 	let (input, body) = recognize(many1_count(alt((
-		verify(
-			take_while(|c| c != quote_char && c != '\\'),
-			|str: &str| str.len() != 0,
-		),
+		verify(take_while(|c| c != quote_char && c != '\\'), |str: &str| {
+			str.len() != 0
+		}),
 		recognize((tag("\\"), tag(quote))),
-	)))).parse(input)?;
+	))))
+	.parse(input)?;
 	let (input, _) = tag(quote).parse(input)?;
-	
+
 	let literal = match quote {
 		"'" => {
 			let mut chars = body.chars();
@@ -155,7 +140,7 @@ fn literal(input: &str) -> PResult<Literal> {
 					input_start,
 					ErrorKind::Alpha,
 					"empty char literal",
-				)))
+				)));
 			};
 			let None = chars.next() else {
 				// TODO: replace escapes
@@ -163,16 +148,13 @@ fn literal(input: &str) -> PResult<Literal> {
 					input_start,
 					ErrorKind::Alpha,
 					"char literal with more than one character",
-				)))
+				)));
 			};
 			Literal::Char(char)
 		},
-		"\"" => {
-			Literal::String(body.to_string())
-		},
+		"\"" => Literal::String(body.to_string()),
 		_ => unreachable!(),
 	};
-	dbg!(line!());
 	Ok((input, literal))
 }
 
@@ -195,39 +177,75 @@ fn identifier(input: &str) -> PResult<String> {
 	.parse(input)
 }
 
-fn whitespace(rule_start: bool) -> impl for<'a> Fn(&'a str) -> PResult<()> {
-	if rule_start {
-		fn parser(input: &str) -> PResult<()> {
-			map(take_while(char::is_whitespace), |_| ()).parse(input)
-		}
-		parser
+enum Linebreak {
+	Included,
+	Excluded,
+}
+
+enum Whitespace {
+	Required,
+	Optional,
+}
+
+fn whitespace(linebreak: Linebreak, whitespace: Whitespace) -> impl for<'a> Fn(&'a str) -> PResult<()> {
+	/* let verify_len = if matches!(whitespace, Whitespace::Required) {
+		|str: &str| str.is_empty()
 	} else {
-		fn parser(input: &str) -> PResult<()> {
+		|_| true
+	}; */
+	/* if matches!(linebreak, Linebreak::Included) {
+		// fn parser(input: &str) -> PResult<()> {
+		move |input: &str| -> PResult<()> {
 			map(
-				take_while1(|c: char| match c {
+				verify(take_while(char::is_whitespace), verify_len),
+				|_| ()
+			).parse(input)
+		}
+		// parser
+	} else {
+		// fn parser(input: &str) -> PResult<()> {
+		move |input: &str| -> PResult<()> {
+			map(
+				verify(take_while(|c: char| match c {
 					'\n' => false,
 					_ => c.is_whitespace(),
-				}),
+				}), verify_len),
 				|_| (),
 			)
 			.parse(input)
 		}
-		parser
+		// parser
+	} */
+	move |input: &str| -> PResult<()> {
+		map(
+			verify(take_while(|c: char| match c {
+				'\n' if matches!(linebreak, Linebreak::Excluded) => false,
+				_ => c.is_whitespace(),
+			}), |str: &str| {
+				if matches!(whitespace, Whitespace::Required) {
+					!str.is_empty()
+				} else {
+					true
+				}
+			}),
+			|_| (),
+		)
+		.parse(input)
 	}
 }
 
 pub fn dbg_dmp<'a, F, O, E: std::fmt::Debug>(
-  f: F,
-  context: &'static str,
+	f: F,
+	context: &'static str,
 ) -> impl Fn(&'a str) -> nom::IResult<&'a str, O, E>
 where
-  F: Fn(&'a str) -> nom::IResult<&'a str, O, E>,
+	F: Fn(&'a str) -> nom::IResult<&'a str, O, E>,
 {
-  move |i: &'a str| match f(i) {
-    Err(e) => {
-      println!("{}: Error({:?}) at:\n{}", context, e, i);
-      Err(e)
-    }
-    a => a,
-  }
+	move |i: &'a str| match f(i) {
+		Err(e) => {
+			println!("{}: Error({:?}) at:\n{}", context, e, i);
+			Err(e)
+		},
+		a => a,
+	}
 }
