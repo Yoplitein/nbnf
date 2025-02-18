@@ -82,10 +82,32 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 					atoms.push(atom);
 					continue;
 				},
-				Err(_) => { break },
+				Err(_) => {},
+			}
+			
+			let Some(token) = self.peek() else {
+				break
+			};
+			match token {
+				Token::GroupOpen => {
+					let group = self.parse_group()?;
+					atoms.push(group);
+					continue;
+				},
+				Token::Semicolon | Token::GroupClose => {
+					break;
+				}
+				_ => bail!("got unexpected {token:?} when parsing rule body"),
 			}
 		}
 		Ok(Rule::Group(atoms))
+	}
+	
+	fn parse_group(&mut self) -> AResult<Rule> {
+		self.expect(Token::GroupOpen)?;
+		let body = self.parse_rule_body()?;
+		self.expect(Token::GroupClose)?;
+		Ok(body)
 	}
 	
 	fn parse_rule_atom(&mut self) -> AResult<Rule> {
