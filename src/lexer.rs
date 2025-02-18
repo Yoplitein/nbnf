@@ -1,4 +1,6 @@
-use nom::{branch::alt, bytes::complete::{tag, take_while, take_while1}, character::complete::usize, combinator::{eof, map, recognize, value, verify}, error::{ErrorKind, FromExternalError}, multi::{many1_count, separated_list0}, Finish, Parser};
+use std::ops::RangeInclusive;
+
+use nom::{branch::alt, bytes::complete::{tag, take_while, take_while1}, character::complete::usize, combinator::{eof, map, opt, recognize, value, verify}, error::{ErrorKind, FromExternalError}, multi::{many1_count, separated_list0}, Finish, Parser};
 use nom_language::error::VerboseError;
 
 use crate::Literal;
@@ -7,19 +9,21 @@ use crate::Literal;
 pub enum Token {
 	Identifier(String),
 	Literal(Literal),
-	Number(usize),
+	LiteralRange {
+		chars: Vec<char>,
+		ranges: Vec<RangeInclusive<char>>,
+	},
+	Repeat {
+		min: usize,
+		max: Option<usize>
+	},
 	Equals,
 	Slash,
 	Question,
 	Star,
-	Comma,
 	Semicolon,
 	GroupOpen,
 	GroupClose,
-	RangeOpen,
-	RangeClose,
-	RepeatOpen,
-	RepeatClose,
 }
 
 pub fn lex(input: &str) -> anyhow::Result<Vec<Token>> {
@@ -43,20 +47,78 @@ fn token(input: &str) -> PResult<Token> {
 	alt((
 		map(identifier, Token::Identifier),
 		map(literal, Token::Literal),
-		map(usize, Token::Number),
+		repeat,
+		value(Token::Repeat { min: 0, max: Some(1) }, tag("?")),
+		value(Token::Repeat { min: 0, max: None }, tag("*")),
 		value(Token::Equals, tag("=")),
 		value(Token::Slash, tag("/")),
-		value(Token::Question, tag("?")),
-		value(Token::Star, tag("*")),
-		value(Token::Comma, tag(",")),
 		value(Token::Semicolon, tag(";")),
 		value(Token::GroupOpen, tag("(")),
 		value(Token::GroupClose, tag(")")),
-		value(Token::RangeOpen, tag("[")),
-		value(Token::RangeClose, tag("]")),
-		value(Token::RepeatOpen, tag("{")),
-		value(Token::RepeatClose, tag("}")),
 	)).parse(input)
+}
+
+fn repeat(input: &str) -> PResult<Token> {
+	let orig = input;
+	let (input, _) = whitespace.parse(input)?;
+	let (input, _) = tag("{").parse(input)?;
+	let (input, _) = whitespace.parse(input)?;
+	let (input, mut min) = opt(usize).parse(input)?;
+	let (input, mut max) = map(opt((
+		whitespace,
+		tag(","),
+		whitespace,
+		opt(usize),
+	)), |v| v.map(|v| v.3)).parse(input)?;
+	let (input, _) = whitespace.parse(input)?;
+	let (input, _) = tag("}").parse(input)?;
+	let (input, _) = whitespace.parse(input)?;
+	
+	eprintln!("{orig:?} => {min:?},{max:?}");
+	
+	match (min, max) {
+		(Some(_), Some(Some(_))) => {},
+		(Some(_), Some(none)) => {
+			max = None;
+		}
+		(Some(n), None) => {
+			max = Some(Some(n));
+		}
+		(None, _) => {
+			min = Some(0)
+		},
+	}
+	let min = min.unwrap();
+	let max = max.flatten();
+	Ok((input, Token::Repeat { min: min, max: max }))
+}
+
+#[test]
+fn test_repeat() {
+	assert_eq!(
+		repeat("{10,20}"),
+		Ok(("", Token::Repeat { min: 10, max: Some(20) })),
+	);
+	assert_eq!(
+		repeat("{10,}"),
+		Ok(("", Token::Repeat { min: 10, max: None })),
+	);
+	assert_eq!(
+		repeat("{,20}"),
+		Ok(("", Token::Repeat { min: 0, max: Some(20) })),
+	);
+	assert_eq!(
+		repeat("{,}"),
+		Ok(("", Token::Repeat { min: 0, max: None })),
+	);
+	assert_eq!(
+		repeat("{}"),
+		Ok(("", Token::Repeat { min: 0, max: None })),
+	);
+	assert_eq!(
+		repeat("{10}"),
+		Ok(("", Token::Repeat { min: 10, max: Some(10) })),
+	);
 }
 
 fn identifier(input: &str) -> PResult<String> {
