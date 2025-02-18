@@ -93,12 +93,21 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 				Token::GroupOpen => {
 					let group = self.parse_group()?;
 					atoms.push(group);
-					continue;
 				},
 				Token::Slash => {
 					self.pop().unwrap_or_else(|| unreachable!());
 					alts.push(Rule::Group(atoms));
 					atoms = vec![];
+				},
+				Token::Repeat { .. } => {
+					let Some(Token::Repeat { min, max }) = self.pop() else {
+						unreachable!()
+					};
+					let Some(last) = atoms.pop() else {
+						bail!("found repeat at start of rule body/group")
+					};
+					let last = last.into();
+					atoms.push(Rule::Repeat { rule: last, min, max })
 				},
 				Token::Semicolon | Token::GroupClose => {
 					break;
