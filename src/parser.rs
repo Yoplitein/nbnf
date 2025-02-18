@@ -75,7 +75,17 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 	}
 	
 	fn parse_rule_body(&mut self) -> AResult<Rule> {
-		self.parse_rule_atom()
+		let mut atoms = vec![];
+		while self.peek().is_some() {
+			match self.parse_rule_atom() {
+				Ok(atom) => {
+					atoms.push(atom);
+					continue;
+				},
+				Err(_) => { break },
+			}
+		}
+		Ok(Rule::Group(atoms))
 	}
 	
 	fn parse_rule_atom(&mut self) -> AResult<Rule> {
