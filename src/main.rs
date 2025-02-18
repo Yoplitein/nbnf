@@ -6,9 +6,10 @@ use nom::Parser;
 fn main() -> anyhow::Result<()> {
 	// top = 'a' 'b'
 	let grammar = r#"
-		top = 'a' ('b' 'c') 'd'
+		top = 'a' 'b'?;
 	"#;
-	let grammar = nbnf::parse_grammar(grammar)?;
+	// let grammar = nbnf::parse_grammar(grammar)?;
+	let grammar = nbnf::lexer::lex(grammar)?;
 	dbg!(grammar);
 
 	Ok(())
@@ -17,7 +18,7 @@ fn main() -> anyhow::Result<()> {
 #[cfg(none)]
 fn main() -> anyhow::Result<()> {
 	let inp = r#""ab""#;
-	dbg!(nbnf::literal(inp));
+	dbg!(nbnf::lexer::token(inp));
 
 	Ok(())
 }
