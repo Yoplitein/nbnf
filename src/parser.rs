@@ -75,6 +75,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 	}
 	
 	fn parse_rule_body(&mut self) -> AResult<Rule> {
+		let mut alts = vec![];
 		let mut atoms = vec![];
 		while self.peek().is_some() {
 			match self.parse_rule_atom() {
@@ -94,13 +95,24 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 					atoms.push(group);
 					continue;
 				},
+				Token::Slash => {
+					self.pop().unwrap_or_else(|| unreachable!());
+					alts.push(Rule::Group(atoms));
+					atoms = vec![];
+				},
 				Token::Semicolon | Token::GroupClose => {
 					break;
 				}
 				_ => bail!("got unexpected {token:?} when parsing rule body"),
 			}
 		}
-		Ok(Rule::Group(atoms))
+		Ok(if !alts.is_empty() {
+			ensure!(!atoms.is_empty(), "found alternate with illegal trailing slash");
+			alts.push(Rule::Group(atoms));
+			Rule::Alternate(alts)
+		} else {
+			Rule::Group(atoms)
+		})
 	}
 	
 	fn parse_group(&mut self) -> AResult<Rule> {
