@@ -6,7 +6,8 @@ pub mod parser;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 
-pub use crate::{lexer::Token, parser::{Grammar, Rule}};
+pub use crate::lexer::Token;
+pub use crate::parser::{Grammar, Rule};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {
