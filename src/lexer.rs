@@ -47,6 +47,7 @@ fn token(input: &str) -> PResult<Token> {
 	alt((
 		map(identifier, Token::Identifier),
 		map(literal, Token::Literal),
+		literal_range,
 		repeat,
 		value(Token::Repeat { min: 0, max: Some(1) }, tag("?")),
 		value(Token::Repeat { min: 0, max: None }, tag("*")),
@@ -56,6 +57,154 @@ fn token(input: &str) -> PResult<Token> {
 		value(Token::GroupOpen, tag("(")),
 		value(Token::GroupClose, tag(")")),
 	)).parse(input)
+}
+
+fn literal_range(input: &str) -> PResult<Token> {
+	#[derive(Clone, Debug)]
+	enum CharOrRange {
+		Char(char),
+		Range(RangeInclusive<char>),
+	}
+
+	fn char(input: &str) -> PResult<CharOrRange> {
+		verify(
+			map(take(1usize), |str: &str| {
+				let mut chars = str.chars();
+				let Some(char) = chars.next() else {
+					unreachable!()
+				};
+				let None = chars.next() else {
+					panic!("more than one char given by take(1usize)")
+				};
+				CharOrRange::Char(char)
+			}),
+			|char| !matches!(char, CharOrRange::Char(']')),
+		)
+		.parse(input)
+	}
+
+	fn escape_char(input: &str) -> PResult<CharOrRange> {
+		alt((
+			value(CharOrRange::Char(']'), tag(r"\]")),
+			// TODO: remaining escapes
+		)).parse(input)
+	}
+
+	fn range(input: &str) -> PResult<CharOrRange> {
+		let (input, CharOrRange::Char(start)) = char.parse(input)? else {
+			unreachable!()
+		};
+		let (input, _) = tag("-").parse(input)?;
+		let (input, CharOrRange::Char(end)) = char.parse(input)? else {
+			unreachable!()
+		};
+		Ok((input, CharOrRange::Range(start ..= end)))
+	}
+
+	let (input, _) = whitespace.parse(input)?;
+	let (input, _) = tag("[").parse(input)?;
+
+	let (input, chars_and_ranges) = many0(alt((range, escape_char, char))).parse(input)?;
+	let mut chars = vec![];
+	let mut ranges = vec![];
+	for v in chars_and_ranges {
+		match v {
+			CharOrRange::Char(char) => chars.push(char),
+			CharOrRange::Range(range) => ranges.push(range),
+		}
+	}
+
+	let (input, _) = tag("]").parse(input)?;
+	let (input, _) = whitespace.parse(input)?;
+
+	Ok((input, Token::LiteralRange { chars, ranges }))
+}
+
+#[test]
+fn test_literal_range() {
+	assert_eq!(
+		literal_range("[]"),
+		Ok((
+			"",
+			Token::LiteralRange {
+				chars: vec![],
+				ranges: vec![]
+			}
+		)),
+	);
+	assert_eq!(
+		literal_range(r"[[]"),
+		Ok((
+			"",
+			Token::LiteralRange {
+				chars: vec!['['],
+				ranges: vec![]
+			}
+		)),
+	);
+	assert_eq!(
+		literal_range(r"[\]]"),
+		Ok((
+			"",
+			Token::LiteralRange {
+				chars: vec![']'],
+				ranges: vec![]
+			}
+		)),
+	);
+	assert_eq!(
+		literal_range("[a]"),
+		Ok((
+			"",
+			Token::LiteralRange {
+				chars: vec!['a'],
+				ranges: vec![]
+			}
+		)),
+	);
+	assert_eq!(
+		literal_range("[ab]"),
+		Ok((
+			"",
+			Token::LiteralRange {
+				chars: vec!['a', 'b'],
+				ranges: vec![]
+			}
+		)),
+	);
+	assert_eq!(
+		literal_range("[ab-c]"),
+		Ok((
+			"",
+			Token::LiteralRange {
+				chars: vec!['a'],
+				ranges: vec!['b' ..= 'c']
+			}
+		)),
+	);
+	assert_eq!(
+		literal_range("[ab-cd]"),
+		Ok((
+			"",
+			Token::LiteralRange {
+				chars: vec!['a', 'd'],
+				ranges: vec!['b' ..= 'c']
+			}
+		)),
+	);
+	assert_eq!(
+		literal_range("[ab-cde-f]"),
+		Ok((
+			"",
+			Token::LiteralRange {
+				chars: vec!['a', 'd'],
+				ranges: vec![
+					'b' ..= 'c',
+					'e' ..= 'f'
+				]
+			}
+		)),
+	);
 }
 
 fn repeat(input: &str) -> PResult<Token> {
