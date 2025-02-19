@@ -4,6 +4,7 @@ pub mod lexer;
 pub mod parser;
 
 use std::collections::HashMap;
+use std::ops::RangeInclusive;
 
 pub use crate::{lexer::Token, parser::{Grammar, Rule}};
 
@@ -11,6 +12,10 @@ pub use crate::{lexer::Token, parser::{Grammar, Rule}};
 pub enum Literal {
 	Char(char),
 	String(String),
+	Range {
+		chars: Vec<char>,
+		ranges: Vec<RangeInclusive<char>>,
+	},
 }
 
 pub fn parse_grammar(input: &str) -> anyhow::Result<Grammar> {

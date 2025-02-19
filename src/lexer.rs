@@ -9,10 +9,6 @@ use crate::Literal;
 pub enum Token {
 	Identifier(String),
 	Literal(Literal),
-	LiteralRange {
-		chars: Vec<char>,
-		ranges: Vec<RangeInclusive<char>>,
-	},
 	Repeat {
 		min: usize,
 		max: Option<usize>
@@ -117,7 +113,7 @@ fn literal_range(input: &str) -> PResult<Token> {
 	let (input, _) = tag("]").parse(input)?;
 	let (input, _) = whitespace.parse(input)?;
 
-	Ok((input, Token::LiteralRange { chars, ranges }))
+	Ok((input, Token::Literal(Literal::Range { chars, ranges })))
 }
 
 #[test]
@@ -126,83 +122,83 @@ fn test_literal_range() {
 		literal_range("[]"),
 		Ok((
 			"",
-			Token::LiteralRange {
+			Token::Literal(Literal::Range {
 				chars: vec![],
 				ranges: vec![]
-			}
+			})
 		)),
 	);
 	assert_eq!(
 		literal_range(r"[[]"),
 		Ok((
 			"",
-			Token::LiteralRange {
+			Token::Literal(Literal::Range {
 				chars: vec!['['],
 				ranges: vec![]
-			}
+			})
 		)),
 	);
 	assert_eq!(
 		literal_range(r"[\]]"),
 		Ok((
 			"",
-			Token::LiteralRange {
+			Token::Literal(Literal::Range {
 				chars: vec![']'],
 				ranges: vec![]
-			}
+			})
 		)),
 	);
 	assert_eq!(
 		literal_range("[a]"),
 		Ok((
 			"",
-			Token::LiteralRange {
+			Token::Literal(Literal::Range {
 				chars: vec!['a'],
 				ranges: vec![]
-			}
+			})
 		)),
 	);
 	assert_eq!(
 		literal_range("[ab]"),
 		Ok((
 			"",
-			Token::LiteralRange {
+			Token::Literal(Literal::Range {
 				chars: vec!['a', 'b'],
 				ranges: vec![]
-			}
+			})
 		)),
 	);
 	assert_eq!(
 		literal_range("[ab-c]"),
 		Ok((
 			"",
-			Token::LiteralRange {
+			Token::Literal(Literal::Range {
 				chars: vec!['a'],
 				ranges: vec!['b' ..= 'c']
-			}
+			})
 		)),
 	);
 	assert_eq!(
 		literal_range("[ab-cd]"),
 		Ok((
 			"",
-			Token::LiteralRange {
+			Token::Literal(Literal::Range {
 				chars: vec!['a', 'd'],
 				ranges: vec!['b' ..= 'c']
-			}
+			})
 		)),
 	);
 	assert_eq!(
 		literal_range("[ab-cde-f]"),
 		Ok((
 			"",
-			Token::LiteralRange {
+			Token::Literal(Literal::Range {
 				chars: vec!['a', 'd'],
 				ranges: vec![
 					'b' ..= 'c',
 					'e' ..= 'f'
 				]
-			}
+			})
 		)),
 	);
 }

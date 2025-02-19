@@ -6,7 +6,7 @@ use nom::Parser;
 fn main() -> anyhow::Result<()> {
 	// top = 'a' 'b'
 	let grammar = r#"
-		top = 'a'?;
+		top = [ab-cde-fg];
 	"#;
 	let grammar = nbnf::parse_grammar(grammar)?;
 	// let grammar = nbnf::lexer::lex(grammar)?;
