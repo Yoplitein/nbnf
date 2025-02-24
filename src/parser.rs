@@ -124,7 +124,14 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 			alts.push(Rule::Group(atoms));
 			Rule::Alternate(alts)
 		} else {
-			Rule::Group(atoms)
+			if atoms.len() != 1 {
+				Rule::Group(atoms)
+			} else {
+				let Some(rule) = atoms.into_iter().next() else {
+					unreachable!()
+				};
+				rule
+			}
 		})
 	}
 
