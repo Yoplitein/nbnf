@@ -2,6 +2,7 @@
 
 pub mod lexer;
 pub mod parser;
+pub mod generator;
 
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
