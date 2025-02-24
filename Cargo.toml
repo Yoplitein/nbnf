@@ -10,3 +10,6 @@ unexpected_cfgs = { level = "warn", check-cfg = ["cfg(none)"] }
 anyhow = { version = "1.0.95", features = ["backtrace"] }
 nom = "8.0.0"
 nom-language = "0.1.0"
+prettyplease = "0.2.29"
+proc-macro2 = "1.0.93"
+quote = "1.0.38"
