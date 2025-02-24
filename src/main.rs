@@ -6,13 +6,13 @@ use nom::Parser;
 fn main() -> anyhow::Result<()> {
 	// top = 'a' 'b'
 	let grammar = r#"
-		top = "hello";
+		top = "hello" "goodbye";
 	"#;
 	let grammar = nbnf::parse_grammar(grammar)?;
 	// let grammar = nbnf::lexer::lex(grammar)?;
 	dbg!(&grammar);
 	let parser = nbnf::generator::generate_parser(&grammar)?;
-	eprintln!("```\n{parser}\n```");
+	eprintln!("```{parser}```");
 
 	Ok(())
 }
