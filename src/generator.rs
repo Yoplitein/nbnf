@@ -90,7 +90,29 @@ fn group_or_alternate(is_group: bool, rules: &[Rule]) -> AResult<TokenStream> {
 }
 
 fn repeat(rule: &Rule, min: usize, max: Option<usize>) -> AResult<TokenStream> {
-	todo!()
+	let inner = rule_body(rule)?;
+	Ok(match (min, max) {
+		(0, Some(1)) => quote! {
+			nom::combinator::opt(#inner)
+		},
+		(1, Some(1)) => inner,
+		(min, Some(max)) => quote! {
+			nom::multi::many_m_n(
+				#min,
+				#max,
+				#inner,
+			)
+		},
+		(0, None) => quote! {
+			nom::multi::many0(#inner)
+		},
+		(min, None) => quote! {
+			nom::combinator::verify(
+				nom::multi::many0(#inner),
+				|xs: Vec<_>| xs.len() >= #min,
+			)
+		},
+	})
 }
 
 fn ident(ident: &str) -> Ident {
