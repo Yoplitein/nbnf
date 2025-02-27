@@ -79,30 +79,9 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 			});
 			
 			quote! {
-				nom::combinator::map(
-					nom::combinator::verify(
-						nom::bytes::complete::take(1usize),
-						|str: &str| {
-							let mut chars = str.chars();
-							let Some(char) = chars.next() else {
-								unreachable!("take(1) returned empty string")
-							};
-							let None = chars.next() else {
-								unreachable!("take(1) returned string with more than one char")
-							};
-							#conditions
-						}
-					),
-					|str: &str| {
-						let mut chars = str.chars();
-						let Some(char) = chars.next() else {
-							unreachable!("take(1) returned empty string")
-						};
-						let None = chars.next() else {
-							unreachable!("take(1) returned string with more than one char")
-						};
-						char
-					}
+				nom::combinator::verify(
+					nom::character::complete::anychar,
+					|&char: &char| #conditions
 				)
 			}
 		},
