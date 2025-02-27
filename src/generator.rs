@@ -129,7 +129,7 @@ fn group_or_alternate(is_group: bool, rules: &[Rule]) -> AResult<TokenStream> {
 		seq = quote! { (#seq) };
 	} else {
 		seq = quote! {
-			nom::branch::alt(#seq)
+			nom::branch::alt((#seq))
 		};
 	}
 	
