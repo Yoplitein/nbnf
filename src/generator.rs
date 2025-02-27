@@ -150,6 +150,9 @@ fn repeat(rule: &Rule, min: usize, max: Option<usize>) -> AResult<TokenStream> {
 		(0, None) => quote! {
 			nom::multi::many0(#inner)
 		},
+		(1, None) => quote! {
+			nom::multi::many1(#inner)
+		},
 		(min, None) => quote! {
 			nom::combinator::verify(
 				nom::multi::many0(#inner),
