@@ -48,16 +48,60 @@ fn rule_body(rule: &Rule) -> AResult<TokenStream> {
 
 fn literal(literal: &Literal) -> AResult<TokenStream> {
 	Ok(match literal {
-		Literal::Char(char) => {
-			todo!()
+		Literal::Char(char) => quote! {
+			nom::character::complete::char(#char)
 		},
-		Literal::String(str) => {
-			quote! {
-				nom::bytes::complete::tag(#str)
-			}
+		Literal::String(str) => quote! {
+			nom::bytes::complete::tag(#str)
 		},
 		Literal::Range { chars, ranges } => {
-			todo!()
+			let mut conditions = vec![];
+			for char in chars {
+				conditions.push(quote! {
+					char == #char
+				});
+			}
+			for range in ranges {
+				let start = range.start();
+				let end = range.end();
+				conditions.push(quote! {
+					(#start ..= #end).contains(&char)
+				});
+			}
+			let conditions = conditions.into_iter().reduce(|l, r| quote! {
+				#l || #r
+			}).unwrap_or_else(|| quote! {
+				// empty range matches exactly one character
+				true
+			});
+			
+			quote! {
+				nom::combinator::map(
+					nom::combinator::verify(
+						nom::bytes::complete::take(1usize),
+						|str: &str| {
+							let mut chars = str.chars();
+							let Some(char) = chars.next() else {
+								unreachable!("take(1) returned empty string")
+							};
+							let None = chars.next() else {
+								unreachable!("take(1) returned string with more than one char")
+							};
+							#conditions
+						}
+					),
+					|str: &str| {
+						let mut chars = str.chars();
+						let Some(char) = chars.next() else {
+							unreachable!("take(1) returned empty string")
+						};
+						let None = chars.next() else {
+							unreachable!("take(1) returned string with more than one char")
+						};
+						char
+					}
+				)
+			}
 		},
 	})
 }
