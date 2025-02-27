@@ -23,8 +23,8 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 		};
 	}
 	
-	// let res = prettyplease::unparse(file) // TODO
-	let res = module.to_string();
+	let file = syn::parse2(module)?;
+	let res = prettyplease::unparse(&file);
 	Ok(res)
 }
 

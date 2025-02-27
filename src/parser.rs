@@ -93,8 +93,19 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 				},
 				Token::Slash => {
 					self.pop().unwrap_or_else(|| unreachable!());
-					alts.push(Rule::Group(atoms));
-					atoms = vec![];
+					match atoms.len() {
+						0 => bail!("found alternate with illegal leading slash"),
+						1 => {
+							let Some(atom) = atoms.pop() else {
+								unreachable!()
+							};
+							alts.push(atom);
+						},
+						_ => {
+							alts.push(Rule::Group(atoms));
+							atoms = vec![];
+						},
+					}
 				},
 				Token::Repeat { .. } => {
 					let Some(Token::Repeat { min, max }) = self.pop() else {
@@ -121,7 +132,18 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 				!atoms.is_empty(),
 				"found alternate with illegal trailing slash"
 			);
-			alts.push(Rule::Group(atoms));
+			match atoms.len() {
+				0 => bail!("found alternate with illegal trailing slash"),
+				1 => {
+					let Some(atom) = atoms.pop() else {
+						unreachable!()
+					};
+					alts.push(atom);
+				},
+				_ => {
+					alts.push(Rule::Group(atoms));
+				},
+			}
 			Rule::Alternate(alts)
 		} else {
 			if atoms.len() != 1 {
