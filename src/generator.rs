@@ -12,11 +12,11 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	};
 	for (rule_name, rule) in &grammar.rules {
 		let parser = rule_top(&rule)?;
-		let rule_name = Ident::new_raw(&rule_name, Span::call_site());
+		let rule_ident = raw_ident(&rule_name);
 		module = quote! {
 			#module
 			
-			fn #rule_name(input: &str) -> nom::IResult<&str, &str> {
+			fn #rule_ident(input: &str) -> nom::IResult<&str, &str> {
 				let (input, output) = #parser.parse(input)?;
 				Ok((input, output))
 			}
@@ -40,7 +40,10 @@ fn rule_top(rule: &Rule) -> AResult<TokenStream> {
 fn rule_body(rule: &Rule) -> AResult<TokenStream> {
 	match rule {
 		Rule::Literal(v) => literal(v),
-		Rule::Rule(rule_name) => Ok(quote! { #rule_name }),
+		Rule::Rule(rule_name) => {
+			let rule_ident = raw_ident(rule_name);
+			Ok(quote! { #rule_ident })
+		},
 		Rule::Group(rules) | Rule::Alternate(rules) => group_or_alternate(matches!(rule, Rule::Group(_)), rules),
 		&Rule::Repeat { ref rule, min, max } => repeat(rule, min, max),
 	}
@@ -164,4 +167,8 @@ fn repeat(rule: &Rule, min: usize, max: Option<usize>) -> AResult<TokenStream> {
 
 fn ident(ident: &str) -> Ident {
 	Ident::new(ident, Span::call_site())
+}
+
+fn raw_ident(ident: &str) -> Ident {
+	Ident::new_raw(ident, Span::call_site())
 }
