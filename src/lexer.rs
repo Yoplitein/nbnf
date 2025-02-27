@@ -22,6 +22,9 @@ pub enum Token {
 	Semicolon,
 	GroupOpen,
 	GroupClose,
+	Not,
+	Recognize,
+	Epsilon,
 }
 
 pub fn lex(input: &str) -> anyhow::Result<Vec<Token>> {
@@ -61,6 +64,8 @@ fn token(input: &str) -> PResult<Token> {
 		value(Token::Semicolon, tag(";")),
 		value(Token::GroupOpen, tag("(")),
 		value(Token::GroupClose, tag(")")),
+		value(Token::Recognize, tag("~")),
+		value(Token::Epsilon, tag("&")),
 	))
 	.parse(input)
 }

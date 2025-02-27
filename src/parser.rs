@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::iter::Peekable;
 use std::mem::discriminant;
 
@@ -23,6 +23,9 @@ pub enum Rule {
 		min: usize,
 		max: Option<usize>,
 	},
+	Not(Box<Rule>),
+	Recognize(Box<Rule>),
+	Epsilon,
 }
 
 pub fn parse(tokens: Vec<Token>) -> AResult<Grammar> {
@@ -31,9 +34,15 @@ pub fn parse(tokens: Vec<Token>) -> AResult<Grammar> {
 	parser.parse()
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Modifier {
+	Not,
+	Recognize,
+}
+
 struct Parser<Iter: Iterator>(Peekable<Iter>);
 
-impl<Iter: Iterator<Item = Token>> Parser<Iter> {
+impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 	fn peek(&mut self) -> Option<&Token> {
 		self.0.peek()
 	}
@@ -76,10 +85,19 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 	fn parse_rule_body(&mut self) -> AResult<Rule> {
 		let mut alts = vec![];
 		let mut atoms = vec![];
+		let mut pending_modifiers = HashSet::new();
+		let mut last_len = usize::MAX;
 		while self.peek().is_some() {
-			match self.parse_rule_atom() {
+			let len = self.0.len();
+			if len == last_len {
+				panic!("parse_rule_body stuck in infinite loop at token {:?}", self.0.peek());
+			}
+			last_len = len;
+			
+			match self.parse_operand() {
 				Ok(atom) => {
 					atoms.push(atom);
+					self.process_modifiers(&mut atoms, &mut pending_modifiers);
 					continue;
 				},
 				Err(_) => {},
@@ -121,11 +139,23 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 						max,
 					})
 				},
+				Token::Not => {
+					self.pop().unwrap_or_else(|| unreachable!());
+					pending_modifiers.insert(Modifier::Not);
+					continue;
+				},
+				Token::Recognize => {
+					self.pop().unwrap_or_else(|| unreachable!());
+					pending_modifiers.insert(Modifier::Recognize);
+					continue;
+				},
 				Token::Semicolon | Token::GroupClose => {
 					break;
 				},
 				_ => bail!("got unexpected {token:?} when parsing rule body"),
 			}
+			
+			self.process_modifiers(&mut atoms, &mut pending_modifiers);
 		}
 		Ok(if !alts.is_empty() {
 			ensure!(
@@ -156,6 +186,30 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 			}
 		})
 	}
+	
+	fn process_modifiers(&mut self, atoms: &mut Vec<Rule>, pending_modifiers: &mut HashSet<Modifier>) {
+		let Some(next) = self.peek() else { return };
+		dbg!(next, &pending_modifiers);
+		if Self::triggers_modifiers(next) && !pending_modifiers.is_empty() {
+			let Some(mut atom) = atoms.pop() else {
+				panic!("trying to process modifiers but no atom to pop")
+			};
+			
+			dbg!(&atom);
+			if pending_modifiers.contains(&Modifier::Not) {
+				atom = Rule::Not(atom.into());
+				pending_modifiers.remove(&Modifier::Not);
+			}
+			dbg!(&atom);
+			if pending_modifiers.contains(&Modifier::Recognize) {
+				atom = Rule::Recognize(atom.into());
+				pending_modifiers.remove(&Modifier::Recognize);
+			}
+			dbg!(&atom);
+			
+			atoms.push(atom);
+		}
+	}
 
 	fn parse_group(&mut self) -> AResult<Rule> {
 		self.expect(Token::GroupOpen)?;
@@ -164,9 +218,9 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 		Ok(body)
 	}
 
-	fn parse_rule_atom(&mut self) -> AResult<Rule> {
+	fn parse_operand(&mut self) -> AResult<Rule> {
 		let Some(token) = self.peek() else {
-			bail!("trying to parse rule atom but got eof")
+			bail!("trying to parse rule operand but got eof")
 		};
 		Ok(match token {
 			Token::Identifier(_) => {
@@ -181,7 +235,25 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 				};
 				Rule::Literal(literal)
 			},
+			Token::Epsilon => {
+				let Some(_) = self.pop() else {
+					unreachable!()
+				};
+				Rule::Epsilon
+			}
 			_ => bail!("expecting rule atom but got {token:?}"),
 		})
+	}
+	
+	fn triggers_modifiers(token: &Token) -> bool {
+		match token {
+			Token::Identifier(_) |
+			Token::Literal(_) |
+			Token::Slash |
+			Token::Semicolon |
+			Token::GroupOpen |
+			Token::Epsilon => true,
+			_ => false,
+		}
 	}
 }

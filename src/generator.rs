@@ -10,6 +10,7 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	let mut module = quote! {
 		use nom::Parser;
 	};
+	
 	for (rule_name, rule) in &grammar.rules {
 		let parser = rule_top(&rule)?;
 		let rule_ident = raw_ident(&rule_name);
@@ -46,6 +47,21 @@ fn rule_body(rule: &Rule) -> AResult<TokenStream> {
 		},
 		Rule::Group(rules) | Rule::Alternate(rules) => group_or_alternate(matches!(rule, Rule::Group(_)), rules),
 		&Rule::Repeat { ref rule, min, max } => repeat(rule, min, max),
+		Rule::Not(inner) => {
+			let inner = rule_body(inner)?;
+			Ok(quote! {
+				nom::combinator::not(#inner)
+			})
+		},
+		Rule::Recognize(inner) => {
+			let inner = rule_body(inner)?;
+			Ok(quote! {
+				nom::combinator::recognize(#inner)
+			})
+		},
+		Rule::Epsilon => Ok(quote! {
+			nom::combinator::success(())
+		}),
 	}
 }
 
