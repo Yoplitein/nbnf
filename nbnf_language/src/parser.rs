@@ -97,7 +97,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 		let mut rules = HashMap::new();
 		let mut top_rule = None;
 		while let Some(token) = self.pop() {
-			let Token::Identifier(rule_name) = token else {
+			let Token::Rule(rule_name) = token else {
 				bail!("expected identifier to start rule definition but got {token:?}")
 			};
 			if top_rule.is_none() {
@@ -288,8 +288,8 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			bail!("trying to parse rule operand but got eof")
 		};
 		Ok(match token {
-			Token::Identifier(_) => {
-				let Some(Token::Identifier(rule_name)) = self.pop() else {
+			Token::Rule(_) => {
+				let Some(Token::Rule(rule_name)) = self.pop() else {
 					unreachable!()
 				};
 				Expr::Rule(rule_name)
@@ -310,7 +310,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 
 	fn triggers_modifiers(token: &Token) -> bool {
 		match token {
-			Token::Identifier(_) |
+			Token::Rule(_) |
 			Token::Literal(_) |
 			Token::Slash |
 			Token::Semicolon |

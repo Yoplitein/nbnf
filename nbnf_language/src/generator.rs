@@ -41,9 +41,9 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 fn expr_body(body: &Expr) -> AResult<TokenStream> {
 	match body {
 		Expr::Literal(v) => literal(v),
-		Expr::Rule(rule_name) => {
-			let rule_ident = raw_ident(rule_name);
-			Ok(quote! { #rule_ident })
+		Expr::Rule(rule_path) => {
+			let rule_path = path(rule_path)?;
+			Ok(quote! { #rule_path })
 		},
 		Expr::Group(exprs) | Expr::Alternate(exprs) => {
 			group_or_alternate(matches!(body, Expr::Group(_)), exprs)

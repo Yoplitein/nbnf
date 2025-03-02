@@ -7,7 +7,7 @@ use nom::character::anychar;
 use nom::character::complete::usize;
 use nom::combinator::{cut, eof, map, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
-use nom::multi::{many0, many1_count, separated_list0};
+use nom::multi::{many0, many1_count, separated_list0, separated_list1};
 use nom::{Finish, Offset, Parser};
 use nom_language::error::VerboseError;
 
@@ -15,7 +15,7 @@ use crate::Literal;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
-	Identifier(String),
+	Rule(String),
 	Literal(Literal),
 	Repeat { min: usize, max: Option<usize> },
 	RustSrc(String),
@@ -52,7 +52,7 @@ fn top(input: &str) -> PResult<Vec<Token>> {
 
 fn token(input: &str) -> PResult<Token> {
 	alt((
-		map(identifier, Token::Identifier),
+		map(path, Token::Rule),
 		map(literal, Token::Literal),
 		map(rustsrc, Token::RustSrc),
 		literal_range,
@@ -343,7 +343,17 @@ fn test_rustsrc() {
 	assert_eq!(parse("<({>"), Ok(("", "({")),);
 }
 
-fn identifier(input: &str) -> PResult<String> {
+fn path(input: &str) -> PResult<String> {
+	map(
+		recognize((
+			opt(tag("::")),
+			separated_list1(tag("::"), identifier),
+		)),
+		str::to_string
+	).parse(input)
+}
+
+fn identifier(input: &str) -> PResult<&str> {
 	fn is_ident_char(start: bool, char: char) -> bool {
 		match char {
 			'_' | '-' => true,
@@ -352,13 +362,10 @@ fn identifier(input: &str) -> PResult<String> {
 		}
 	}
 
-	map(
 		recognize((
 			take_while1(|c| is_ident_char(true, c)),
 			take_while(|c| is_ident_char(false, c)),
-		)),
-		str::to_string,
-	)
+		))
 	.parse(input)
 }
 
