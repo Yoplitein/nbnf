@@ -1,15 +1,15 @@
 #![allow(unused)]
 
+pub mod generator;
 pub mod lexer;
 pub mod parser;
-pub mod generator;
 
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 
+pub use crate::generator::{generate_parser, generate_parser_tokens};
 pub use crate::lexer::Token;
 pub use crate::parser::{Grammar, Rule};
-pub use crate::generator::{generate_parser, generate_parser_tokens};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {

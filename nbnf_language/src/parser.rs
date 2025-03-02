@@ -90,10 +90,13 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 		while self.peek().is_some() {
 			let len = self.0.len();
 			if len == last_len {
-				panic!("parse_rule_body stuck in infinite loop at token {:?}", self.0.peek());
+				panic!(
+					"parse_rule_body stuck in infinite loop at token {:?}",
+					self.0.peek()
+				);
 			}
 			last_len = len;
-			
+
 			match self.parse_operand() {
 				Ok(atom) => {
 					atoms.push(atom);
@@ -154,7 +157,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				},
 				_ => bail!("got unexpected {token:?} when parsing rule body"),
 			}
-			
+
 			self.process_modifiers(&mut atoms, &mut pending_modifiers);
 		}
 		Ok(if !alts.is_empty() {
@@ -186,14 +189,18 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			}
 		})
 	}
-	
-	fn process_modifiers(&mut self, atoms: &mut Vec<Rule>, pending_modifiers: &mut HashSet<Modifier>) {
+
+	fn process_modifiers(
+		&mut self,
+		atoms: &mut Vec<Rule>,
+		pending_modifiers: &mut HashSet<Modifier>,
+	) {
 		let Some(next) = self.peek() else { return };
 		if Self::triggers_modifiers(next) && !pending_modifiers.is_empty() {
 			let Some(mut atom) = atoms.pop() else {
 				panic!("trying to process modifiers but no atom to pop")
 			};
-			
+
 			if pending_modifiers.contains(&Modifier::Not) {
 				atom = Rule::Not(atom.into());
 				pending_modifiers.remove(&Modifier::Not);
@@ -202,7 +209,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				atom = Rule::Recognize(atom.into());
 				pending_modifiers.remove(&Modifier::Recognize);
 			}
-			
+
 			atoms.push(atom);
 		}
 	}
@@ -232,15 +239,13 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				Rule::Literal(literal)
 			},
 			Token::Epsilon => {
-				let Some(_) = self.pop() else {
-					unreachable!()
-				};
+				let Some(_) = self.pop() else { unreachable!() };
 				Rule::Epsilon
-			}
+			},
 			_ => bail!("expecting rule atom but got {token:?}"),
 		})
 	}
-	
+
 	fn triggers_modifiers(token: &Token) -> bool {
 		match token {
 			Token::Identifier(_) |

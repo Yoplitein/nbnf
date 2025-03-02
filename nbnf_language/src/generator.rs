@@ -1,7 +1,8 @@
-use std::{collections::HashSet, fmt::Write};
+use std::collections::HashSet;
+use std::fmt::Write;
 
 use anyhow::{ensure, Result as AResult};
-use proc_macro2::{Span, TokenStream, Ident};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 
 use crate::{Grammar, Literal, Rule};
@@ -17,20 +18,20 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
 		use nom::Parser;
 	};
-	
+
 	for (rule_name, rule) in &grammar.rules {
 		let parser = rule_body(&rule)?;
 		let rule_ident = raw_ident(&rule_name);
 		module = quote! {
 			#module
-			
+
 			fn #rule_ident(input: &str) -> nom::IResult<&str, &str> {
 				let (input, output) = #parser.parse(input)?;
 				Ok((input, output))
 			}
 		};
 	}
-	
+
 	Ok(module)
 }
 
@@ -41,7 +42,9 @@ fn rule_body(rule: &Rule) -> AResult<TokenStream> {
 			let rule_ident = raw_ident(rule_name);
 			Ok(quote! { #rule_ident })
 		},
-		Rule::Group(rules) | Rule::Alternate(rules) => group_or_alternate(matches!(rule, Rule::Group(_)), rules),
+		Rule::Group(rules) | Rule::Alternate(rules) => {
+			group_or_alternate(matches!(rule, Rule::Group(_)), rules)
+		},
 		&Rule::Repeat { ref rule, min, max } => repeat(rule, min, max),
 		Rule::Not(inner) => {
 			let inner = rule_body(inner)?;
@@ -83,13 +86,20 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 					(#start ..= #end).contains(&char)
 				});
 			}
-			let conditions = conditions.into_iter().reduce(|l, r| quote! {
-				#l || #r
-			}).unwrap_or_else(|| quote! {
-				// empty range matches exactly one character
-				true
-			});
-			
+			let conditions = conditions
+				.into_iter()
+				.reduce(|l, r| {
+					quote! {
+						#l || #r
+					}
+				})
+				.unwrap_or_else(|| {
+					quote! {
+						// empty range matches exactly one character
+						true
+					}
+				});
+
 			quote! {
 				nom::combinator::verify(
 					nom::character::complete::anychar,
@@ -103,11 +113,10 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 fn group_or_alternate(is_group: bool, rules: &[Rule]) -> AResult<TokenStream> {
 	ensure!(
 		rules.len() > 1,
-		"encountered invalid group/alternate \
-		with less than two elements"
+		"encountered invalid group/alternate with less than two elements"
 	);
-	
-	let mut seq = quote!{};
+
+	let mut seq = quote! {};
 	for child in rules {
 		if !seq.is_empty() {
 			seq = quote! { #seq, };
@@ -115,7 +124,7 @@ fn group_or_alternate(is_group: bool, rules: &[Rule]) -> AResult<TokenStream> {
 		let parser = rule_body(child)?;
 		seq = quote! { #seq #parser };
 	}
-	
+
 	if is_group {
 		seq = quote! { (#seq) };
 	} else {
@@ -123,7 +132,7 @@ fn group_or_alternate(is_group: bool, rules: &[Rule]) -> AResult<TokenStream> {
 			nom::branch::alt((#seq))
 		};
 	}
-	
+
 	Ok(seq)
 }
 
