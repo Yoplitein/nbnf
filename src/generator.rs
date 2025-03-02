@@ -12,7 +12,7 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	};
 	
 	for (rule_name, rule) in &grammar.rules {
-		let parser = rule_top(&rule)?;
+		let parser = rule_body(&rule)?;
 		let rule_ident = raw_ident(&rule_name);
 		module = quote! {
 			#module
@@ -27,15 +27,6 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	let file = syn::parse2(module)?;
 	let res = prettyplease::unparse(&file);
 	Ok(res)
-}
-
-fn rule_top(rule: &Rule) -> AResult<TokenStream> {
-	let parser = rule_body(rule)?;
-	let output = quote! {
-		// TODO: figure out subparser outputs
-		nom::combinator::recognize(#parser)
-	};
-	Ok(output)
 }
 
 fn rule_body(rule: &Rule) -> AResult<TokenStream> {
