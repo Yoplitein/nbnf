@@ -18,6 +18,7 @@ pub enum Literal {
 	Range {
 		chars: Vec<char>,
 		ranges: Vec<RangeInclusive<char>>,
+		invert: bool,
 	},
 }
 

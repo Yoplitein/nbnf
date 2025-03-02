@@ -98,25 +98,41 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 		Literal::String(str) => quote! {
 			nom::bytes::complete::tag(#str)
 		},
-		Literal::Range { chars, ranges } => {
+		&Literal::Range { ref chars, ref ranges, invert } => {
 			let mut conditions = vec![];
+			let op = if invert {
+				quote! { != }
+			} else {
+				quote! { == }
+			};
 			for char in chars {
 				conditions.push(quote! {
-					char == #char
+					char #op #char
 				});
 			}
+			let op = if invert {
+				quote! { ! }
+			} else {
+				quote! {}
+			};
 			for range in ranges {
 				let start = range.start();
 				let end = range.end();
 				conditions.push(quote! {
-					(#start ..= #end).contains(&char)
+					#op(#start ..= #end).contains(&char)
 				});
 			}
 			let conditions = conditions
 				.into_iter()
 				.reduce(|l, r| {
-					quote! {
-						#l || #r
+					if invert {
+						quote! {
+							#l && #r
+						}
+					} else {
+						quote! {
+							#l || #r
+						}
 					}
 				})
 				.unwrap_or_else(|| {

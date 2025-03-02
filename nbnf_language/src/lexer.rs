@@ -127,6 +127,9 @@ fn literal_range(input: &str) -> PResult<Token> {
 
 	let (input, _) = whitespace.parse(input)?;
 	let (input, _) = tag("[").parse(input)?;
+	
+	let (input, invert) = opt(tag("^")).parse(input)?;
+	let invert = invert.is_some();
 
 	let (input, chars_and_ranges) = many0(alt((range, escape_char, char))).parse(input)?;
 	let mut chars = vec![];
@@ -141,7 +144,7 @@ fn literal_range(input: &str) -> PResult<Token> {
 	let (input, _) = tag("]").parse(input)?;
 	let (input, _) = whitespace.parse(input)?;
 
-	Ok((input, Token::Literal(Literal::Range { chars, ranges })))
+	Ok((input, Token::Literal(Literal::Range { chars, ranges, invert })))
 }
 
 #[test]
@@ -152,7 +155,8 @@ fn test_literal_range() {
 			"",
 			Token::Literal(Literal::Range {
 				chars: vec![],
-				ranges: vec![]
+				ranges: vec![],
+				invert: false,
 			})
 		)),
 	);
@@ -162,7 +166,8 @@ fn test_literal_range() {
 			"",
 			Token::Literal(Literal::Range {
 				chars: vec!['['],
-				ranges: vec![]
+				ranges: vec![],
+				invert: false,
 			})
 		)),
 	);
@@ -172,7 +177,8 @@ fn test_literal_range() {
 			"",
 			Token::Literal(Literal::Range {
 				chars: vec![']'],
-				ranges: vec![]
+				ranges: vec![],
+				invert: false,
 			})
 		)),
 	);
@@ -182,7 +188,8 @@ fn test_literal_range() {
 			"",
 			Token::Literal(Literal::Range {
 				chars: vec!['a'],
-				ranges: vec![]
+				ranges: vec![],
+				invert: false,
 			})
 		)),
 	);
@@ -192,7 +199,52 @@ fn test_literal_range() {
 			"",
 			Token::Literal(Literal::Range {
 				chars: vec!['a', 'b'],
-				ranges: vec![]
+				ranges: vec![],
+				invert: false,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range("[^a]"),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: vec!['a'],
+				ranges: vec![],
+				invert: true,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range("[a^]"),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: vec!['a', '^'],
+				ranges: vec![],
+				invert: false,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range("[^a]"),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: vec!['a'],
+				ranges: vec![],
+				invert: true,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range("[^]"),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: vec![],
+				ranges: vec![],
+				invert: true,
 			})
 		)),
 	);
@@ -202,7 +254,8 @@ fn test_literal_range() {
 			"",
 			Token::Literal(Literal::Range {
 				chars: vec!['a'],
-				ranges: vec!['b' ..= 'c']
+				ranges: vec!['b' ..= 'c'],
+				invert: false,
 			})
 		)),
 	);
@@ -212,7 +265,8 @@ fn test_literal_range() {
 			"",
 			Token::Literal(Literal::Range {
 				chars: vec!['a', 'd'],
-				ranges: vec!['b' ..= 'c']
+				ranges: vec!['b' ..= 'c'],
+				invert: false,
 			})
 		)),
 	);
@@ -225,7 +279,8 @@ fn test_literal_range() {
 				ranges: vec![
 					'b' ..= 'c',
 					'e' ..= 'f'
-				]
+				],
+				invert: false,
 			})
 		)),
 	);
