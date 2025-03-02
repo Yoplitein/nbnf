@@ -8,3 +8,4 @@ proc-macro = true
 
 [dependencies]
 nbnf_language = { path = "../nbnf_language" }
+quote = "1"
