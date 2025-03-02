@@ -4,7 +4,7 @@ use std::ops::RangeInclusive;
 use anyhow::{anyhow, bail, ensure, Result as AResult};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take, take_while, take_while1};
-use nom::character::anychar;
+use nom::character::{anychar, char};
 use nom::character::complete::usize;
 use nom::combinator::{cut, eof, map, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
@@ -102,26 +102,17 @@ fn literal_range(input: &str) -> PResult<Token> {
 
 	fn char(input: &str) -> PResult<CharOrRange> {
 		verify(
-			map(take(1usize), |str: &str| {
-				let mut chars = str.chars();
-				let Some(char) = chars.next() else {
-					unreachable!()
-				};
-				let None = chars.next() else {
-					panic!("more than one char given by take(1usize)")
-				};
-				CharOrRange::Char(char)
-			}),
+			alt((
+				map(escape_char, CharOrRange::Char),
+				map(anychar, CharOrRange::Char),
+			)),
 			|char| !matches!(char, CharOrRange::Char(']')),
 		)
 		.parse(input)
 	}
 
-	fn escape_char(input: &str) -> PResult<CharOrRange> {
-		alt((
-			value(CharOrRange::Char(']'), tag(r"\]")),
-			// TODO: remaining escapes
-		))
+	fn bracket_escape(input: &str) -> PResult<CharOrRange> {
+		value(CharOrRange::Char(']'), tag(r"\]"))
 		.parse(input)
 	}
 
@@ -135,14 +126,14 @@ fn literal_range(input: &str) -> PResult<Token> {
 		};
 		Ok((input, CharOrRange::Range(start ..= end)))
 	}
-
+	
 	let (input, _) = whitespace.parse(input)?;
 	let (input, _) = tag("[").parse(input)?;
 
 	let (input, invert) = opt(tag("^")).parse(input)?;
 	let invert = invert.is_some();
 
-	let (input, chars_and_ranges) = many0(alt((range, escape_char, char))).parse(input)?;
+	let (input, chars_and_ranges) = many0(alt((range, bracket_escape, char))).parse(input)?;
 	let mut chars = vec![];
 	let mut ranges = vec![];
 	for v in chars_and_ranges {
@@ -302,6 +293,28 @@ fn test_literal_range() {
 			})
 		)),
 	);
+	assert_eq!(
+		literal_range(r#"[\n\r\t\0\\\x7F\u{beEF}]"#),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: vec!['\n', '\r', '\t', '\0', '\\', '\x7F', '\u{BEEF}'],
+				ranges: vec![],
+				invert: false,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range(r#"[\u{1010}-\u{2020}]"#),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: vec![],
+				ranges: vec!['\u{1010}' ..= '\u{2020}'],
+				invert: false,
+			})
+		)),
+	);
 }
 
 fn repeat(input: &str) -> PResult<Token> {
@@ -446,40 +459,26 @@ fn identifier(input: &str) -> PResult<&str> {
 
 fn literal(input: &str) -> PResult<Literal> {
 	let input_start = input;
-	let (input, quote) = alt((tag("'"), tag("\""))).parse(input)?;
-	let Some(quote_char) = quote.chars().next() else {
-		unreachable!()
-	};
-	dbg!((1, input));
+	let (input, quote_char) = alt((char('\''), char('"'))).parse(input)?;
 	let (input, body) = fold_many1(
 		alt((
-			map(
-				verify(take_while(|c| c != quote_char && c != '\\'), |str: &str| {
-					str.len() != 0
-				}),
-				Cow::Borrowed,
+			escape_char,
+			verify(
+				anychar,
+				|&char| char != quote_char,
 			),
-			value(Cow::Borrowed(quote), (tag(r#"\"#), tag(quote))),
-			value(Cow::Borrowed("\\"), tag(r#"\\"#)),
-			value(Cow::Borrowed("\n"), tag(r#"\n"#)),
-			value(Cow::Borrowed("\r"), tag(r#"\r"#)),
-			value(Cow::Borrowed("\t"), tag(r#"\t"#)),
-			value(Cow::Borrowed("\0"), tag(r#"\0"#)),
-			map(hex_escape, |char| Cow::Owned(String::from(char))),
-			map(unicode_escape, |char| Cow::Owned(String::from(char))),
 		)),
 		String::new,
-		|mut str: String, item| {
-			str.push_str(&item);
+		|mut str, char| {
+			str.push(char);
 			str
 		},
 	)
 	.parse(input)?;
-	dbg!((2, input));
-	let (input, _) = tag(quote).parse(input)?;
+	let (input, _) = char(quote_char).parse(input)?;
 
-	let literal = match quote {
-		"'" => {
+	let literal = match quote_char {
+		'\'' => {
 			let mut chars = body.chars();
 			let Some(char) = chars.next() else {
 				return Err(nom::Err::Failure(VerboseError::from_external_error(
@@ -498,10 +497,24 @@ fn literal(input: &str) -> PResult<Literal> {
 			};
 			Literal::Char(char)
 		},
-		"\"" => Literal::String(body.to_string()),
+		'"' => Literal::String(body.to_string()),
 		_ => unreachable!(),
 	};
 	Ok((input, literal))
+}
+
+fn escape_char(input: &str) -> PResult<char> {
+	alt((
+		value('\'', tag(r#"\'"#)),
+		value('"', tag(r#"\""#)),
+		value('\\', tag(r#"\\"#)),
+		value('\n', tag(r#"\n"#)),
+		value('\r', tag(r#"\r"#)),
+		value('\t', tag(r#"\t"#)),
+		value('\0', tag(r#"\0"#)),
+		hex_escape,
+		unicode_escape,
+	)).parse(input)
 }
 
 fn hex_char(input: &str) -> PResult<char> {
@@ -516,30 +529,30 @@ fn hex_digits(min: usize, max: usize) -> impl FnMut(&str) -> PResult<&str> {
 
 fn hex_escape(input: &str) -> PResult<char> {
 	let (input, _) = tag(r#"\x"#).parse(input)?;
-	let (input, char) = map_res(hex_digits(2, 2), |str| -> AResult<char> {
-		let val = u8::from_str_radix(str, 16)?;
+	let (input, char) = cut(map_res(hex_digits(2, 2), |str| -> AResult<char> {
+		let val = u32::from_str_radix(str, 16)?;
 		ensure!(
 			val < 0x80,
 			"ASCII escapes must be in the range 0x00 ..= 0x7F"
 		);
-		let Some(char) = char::from_u32(val as _) else {
+		let Some(char) = char::from_u32(val) else {
 			unreachable!()
 		};
 		Ok(char)
-	})
+	}))
 	.parse(input)?;
 	Ok((input, char))
 }
 
 fn unicode_escape(input: &str) -> PResult<char> {
 	let (input, _) = tag("\\u{").parse(input)?;
-	let (input, char) = map_res(hex_digits(1, 6), |str| -> AResult<char> {
+	let (input, char) = cut(map_res(hex_digits(1, 6), |str| -> AResult<char> {
 		let val = u32::from_str_radix(str, 16)?;
 		let Some(char) = char::from_u32(val as _) else {
 			bail!("U+{val:X} is not a valid codepoint");
 		};
 		Ok(char)
-	})
+	}))
 	.parse(input)?;
 	let (input, _) = tag("}").parse(input)?;
 	Ok((input, char))
