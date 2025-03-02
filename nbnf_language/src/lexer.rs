@@ -3,11 +3,12 @@ use std::ops::RangeInclusive;
 use anyhow::bail;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take, take_while, take_while1};
+use nom::character::anychar;
 use nom::character::complete::usize;
-use nom::combinator::{eof, map, map_res, opt, recognize, value, verify};
+use nom::combinator::{cut, eof, map, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
 use nom::multi::{many0, many1_count, separated_list0};
-use nom::{Finish, Parser};
+use nom::{Finish, Offset, Parser};
 use nom_language::error::VerboseError;
 
 use crate::Literal;
@@ -17,6 +18,7 @@ pub enum Token {
 	Identifier(String),
 	Literal(Literal),
 	Repeat { min: usize, max: Option<usize> },
+	RustSrc(String),
 	Equals,
 	Slash,
 	Semicolon,
@@ -25,6 +27,10 @@ pub enum Token {
 	Not,
 	Recognize,
 	Epsilon,
+	Value,
+	Map,
+	MapOpt,
+	MapRes,
 }
 
 pub fn lex(input: &str) -> anyhow::Result<Vec<Token>> {
@@ -48,6 +54,7 @@ fn token(input: &str) -> PResult<Token> {
 	alt((
 		map(identifier, Token::Identifier),
 		map(literal, Token::Literal),
+		map(rustsrc, Token::RustSrc),
 		literal_range,
 		repeat,
 		value(
@@ -66,6 +73,10 @@ fn token(input: &str) -> PResult<Token> {
 		value(Token::GroupClose, tag(")")),
 		value(Token::Recognize, tag("~")),
 		value(Token::Epsilon, tag("&")),
+		value(Token::Value, tag("@")),
+		value(Token::Map, tag("|")),
+		value(Token::MapOpt, tag("|?")),
+		value(Token::MapRes, tag("|!")),
 	))
 	.parse(input)
 }
@@ -285,6 +296,62 @@ fn test_repeat() {
 				max: Some(10)
 			}
 		)),
+	);
+}
+
+fn rustsrc(input: &str) -> PResult<String> {
+	let (mut input, _) = tag("<").parse(input)?;
+	let start = input;
+	let output_str;
+	let mut bracket_level = 1;
+	loop {
+		let (next_input, char) = cut(anychar).parse(input)?;
+		match char {
+			'<' => bracket_level += 1,
+			'>' => bracket_level -= 1,
+			_ => {},
+		}
+		if bracket_level == 0 {
+			output_str = &start[.. start.offset(input)];
+			input = next_input;
+			break;
+		}
+		input = next_input;
+	}
+	Ok((input, output_str.into()))
+}
+
+#[test]
+fn test_rustsrc() {
+	let mut str = std::cell::UnsafeCell::new(String::new());
+	let mut parse = move |input| {
+		rustsrc(input).map(|(rest, res)| {
+			*str.get_mut() = res;
+			let res = unsafe {
+				// SAFETY: reference used strictly just for equality checks
+				str.get().cast_const().as_ref().unwrap().as_str()
+			};
+			(rest, res)
+		})
+	};
+	
+	assert_eq!(
+		parse("<>"),
+		Ok(("", "")),
+	);
+	assert_eq!(
+		parse("<<>>"),
+		Ok(("", "<>")),
+	);
+	assert!(parse("<<>").is_err());
+	assert_eq!(
+		parse("<foo>"),
+		Ok(("", "foo")),
+	);
+	// eventually we may want to disallow this actually
+	assert_eq!(
+		parse("<({>"),
+		Ok(("", "({")),
 	);
 }
 
