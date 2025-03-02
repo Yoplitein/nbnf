@@ -7,5 +7,6 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
+anyhow = { version = "1", features = ["backtrace"] }
 nbnf_language = { path = "../nbnf_language" }
 quote = "1"
