@@ -340,6 +340,9 @@ fn test_rustsrc() {
 	assert_eq!(parse("<<>>"), Ok(("", "<>")),);
 	assert!(parse("<<>").is_err());
 	assert_eq!(parse("<foo>"), Ok(("", "foo")),);
+	assert_eq!(parse("< >"), Ok(("", " ")),);
+	assert_eq!(parse("<foo bar>"), Ok(("", "foo bar")),);
+	assert_eq!(parse("< foo bar >"), Ok(("", " foo bar ")),);
 	// eventually we may want to disallow this actually
 	assert_eq!(parse("<({>"), Ok(("", "({")),);
 }

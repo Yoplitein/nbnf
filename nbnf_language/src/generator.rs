@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Write;
 
-use anyhow::{ensure, Result as AResult};
+use anyhow::{anyhow, ensure, Context, Result as AResult};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::Path;
@@ -76,7 +76,8 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 				MapFunc::MapOpt => "nom::combinator::map_opt",
 				MapFunc::MapRes => "nom::combinator::map_res",
 			})?;
-			let mapping_code: syn::Expr = syn::parse_str(&mapping_code)?;
+			let mapping_code: syn::Expr = syn::parse_str(&mapping_code)
+				.context(format!("failed to parse mapping code `{mapping_code}`"))?;
 			Ok(match func {
 				MapFunc::Value => quote! {
 					#func_ident(#mapping_code, #expr)
@@ -199,5 +200,5 @@ fn raw_ident(ident: &str) -> Ident {
 }
 
 fn path(path: &str) -> AResult<Path> {
-	Ok(syn::parse_str(path)?)
+	Ok(syn::parse_str(path).context("couldn't parse Rust item path")?)
 }
