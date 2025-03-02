@@ -98,7 +98,11 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 		Literal::String(str) => quote! {
 			nom::bytes::complete::tag(#str)
 		},
-		&Literal::Range { ref chars, ref ranges, invert } => {
+		&Literal::Range {
+			ref chars,
+			ref ranges,
+			invert,
+		} => {
 			let mut conditions = vec![];
 			let op = if invert {
 				quote! { != }

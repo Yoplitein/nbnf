@@ -3,9 +3,6 @@ name = "nbnf_language"
 version = "0.1.0"
 edition = "2021"
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(none)"] }
-
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
 nom = "8"

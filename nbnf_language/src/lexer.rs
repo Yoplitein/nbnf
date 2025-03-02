@@ -1,13 +1,24 @@
+use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
-use anyhow::bail;
+use anyhow::{anyhow, bail, ensure, Result as AResult};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take, take_while, take_while1};
 use nom::character::anychar;
 use nom::character::complete::usize;
 use nom::combinator::{cut, eof, map, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
-use nom::multi::{many0, many1_count, separated_list0, separated_list1};
+use nom::multi::{
+	count,
+	fold_many1,
+	fold_many_m_n,
+	many0,
+	many0_count,
+	many1_count,
+	many_m_n,
+	separated_list0,
+	separated_list1,
+};
 use nom::{Finish, Offset, Parser};
 use nom_language::error::VerboseError;
 
@@ -127,7 +138,7 @@ fn literal_range(input: &str) -> PResult<Token> {
 
 	let (input, _) = whitespace.parse(input)?;
 	let (input, _) = tag("[").parse(input)?;
-	
+
 	let (input, invert) = opt(tag("^")).parse(input)?;
 	let invert = invert.is_some();
 
@@ -144,7 +155,14 @@ fn literal_range(input: &str) -> PResult<Token> {
 	let (input, _) = tag("]").parse(input)?;
 	let (input, _) = whitespace.parse(input)?;
 
-	Ok((input, Token::Literal(Literal::Range { chars, ranges, invert })))
+	Ok((
+		input,
+		Token::Literal(Literal::Range {
+			chars,
+			ranges,
+			invert,
+		}),
+	))
 }
 
 #[test]
@@ -404,12 +422,10 @@ fn test_rustsrc() {
 
 fn path(input: &str) -> PResult<String> {
 	map(
-		recognize((
-			opt(tag("::")),
-			separated_list1(tag("::"), identifier),
-		)),
-		str::to_string
-	).parse(input)
+		recognize((opt(tag("::")), separated_list1(tag("::"), identifier))),
+		str::to_string,
+	)
+	.parse(input)
 }
 
 fn identifier(input: &str) -> PResult<&str> {
@@ -421,10 +437,10 @@ fn identifier(input: &str) -> PResult<&str> {
 		}
 	}
 
-		recognize((
-			take_while1(|c| is_ident_char(true, c)),
-			take_while(|c| is_ident_char(false, c)),
-		))
+	recognize((
+		take_while1(|c| is_ident_char(true, c)),
+		take_while(|c| is_ident_char(false, c)),
+	))
 	.parse(input)
 }
 
@@ -434,13 +450,32 @@ fn literal(input: &str) -> PResult<Literal> {
 	let Some(quote_char) = quote.chars().next() else {
 		unreachable!()
 	};
-	let (input, body) = recognize(many1_count(alt((
-		verify(take_while(|c| c != quote_char && c != '\\'), |str: &str| {
-			str.len() != 0
-		}),
-		recognize((tag("\\"), tag(quote))),
-	))))
+	dbg!((1, input));
+	let (input, body) = fold_many1(
+		alt((
+			map(
+				verify(take_while(|c| c != quote_char && c != '\\'), |str: &str| {
+					str.len() != 0
+				}),
+				Cow::Borrowed,
+			),
+			value(Cow::Borrowed(quote), (tag(r#"\"#), tag(quote))),
+			value(Cow::Borrowed("\\"), tag(r#"\\"#)),
+			value(Cow::Borrowed("\n"), tag(r#"\n"#)),
+			value(Cow::Borrowed("\r"), tag(r#"\r"#)),
+			value(Cow::Borrowed("\t"), tag(r#"\t"#)),
+			value(Cow::Borrowed("\0"), tag(r#"\0"#)),
+			map(hex_escape, |char| Cow::Owned(String::from(char))),
+			map(unicode_escape, |char| Cow::Owned(String::from(char))),
+		)),
+		String::new,
+		|mut str: String, item| {
+			str.push_str(&item);
+			str
+		},
+	)
 	.parse(input)?;
+	dbg!((2, input));
 	let (input, _) = tag(quote).parse(input)?;
 
 	let literal = match quote {
@@ -467,6 +502,73 @@ fn literal(input: &str) -> PResult<Literal> {
 		_ => unreachable!(),
 	};
 	Ok((input, literal))
+}
+
+fn hex_char(input: &str) -> PResult<char> {
+	verify(anychar, char::is_ascii_hexdigit).parse(input)
+}
+
+fn hex_digits(min: usize, max: usize) -> impl FnMut(&str) -> PResult<&str> {
+	move |input: &str| -> PResult<&str> {
+		recognize(fold_many_m_n(min, max, hex_char, || (), |_, _| ())).parse(input)
+	}
+}
+
+fn hex_escape(input: &str) -> PResult<char> {
+	let (input, _) = tag(r#"\x"#).parse(input)?;
+	let (input, char) = map_res(hex_digits(2, 2), |str| -> AResult<char> {
+		let val = u8::from_str_radix(str, 16)?;
+		ensure!(
+			val < 0x80,
+			"ASCII escapes must be in the range 0x00 ..= 0x7F"
+		);
+		let Some(char) = char::from_u32(val as _) else {
+			unreachable!()
+		};
+		Ok(char)
+	})
+	.parse(input)?;
+	Ok((input, char))
+}
+
+fn unicode_escape(input: &str) -> PResult<char> {
+	let (input, _) = tag("\\u{").parse(input)?;
+	let (input, char) = map_res(hex_digits(1, 6), |str| -> AResult<char> {
+		let val = u32::from_str_radix(str, 16)?;
+		let Some(char) = char::from_u32(val as _) else {
+			bail!("U+{val:X} is not a valid codepoint");
+		};
+		Ok(char)
+	})
+	.parse(input)?;
+	let (input, _) = tag("}").parse(input)?;
+	Ok((input, char))
+}
+
+#[test]
+fn test_literal() {
+	assert_eq!(literal(r#"'a'"#), Ok(("", Literal::Char('a'))),);
+	assert!(matches!(literal(r#"''"#), Err(_),));
+	assert_eq!(literal(r#""a""#), Ok(("", Literal::String("a".into()))),);
+	assert_eq!(literal(r#""ab""#), Ok(("", Literal::String("ab".into()))),);
+	assert!(matches!(literal(r#""""#), Err(_),));
+	assert_eq!(literal(r#"'\''"#), Ok(("", Literal::Char('\''))),);
+	assert_eq!(literal(r#"'\n'"#), Ok(("", Literal::Char('\n'))),);
+	assert_eq!(
+		literal(r#""a\"b""#),
+		Ok(("", Literal::String("a\"b".into()))),
+	);
+	assert_eq!(
+		literal(r#""a\\\"b""#),
+		Ok(("", Literal::String("a\\\"b".into()))),
+	);
+	assert_eq!(
+		literal(r#""\n\r\t\0\x7f\x7F\u{beEF}""#),
+		Ok(("", Literal::String("\n\r\t\0\x7F\x7F\u{BEEF}".into()))),
+	);
+	assert!(matches!(literal(r#""\x80""#), Err(_),));
+	assert!(matches!(literal(r#""\u{}""#), Err(_),));
+	assert!(matches!(literal(r#""\u{1234567}""#), Err(_),));
 }
 
 fn whitespace(input: &str) -> PResult<()> {
