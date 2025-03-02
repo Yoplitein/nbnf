@@ -7,6 +7,13 @@ use quote::quote;
 use crate::{Grammar, Literal, Rule};
 
 pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
+	let module = generate_parser_tokens(grammar)?;
+	let file = syn::parse2(module)?;
+	let res = prettyplease::unparse(&file);
+	Ok(res)
+}
+
+pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
 		use nom::Parser;
 	};
@@ -24,9 +31,7 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 		};
 	}
 	
-	let file = syn::parse2(module)?;
-	let res = prettyplease::unparse(&file);
-	Ok(res)
+	Ok(module)
 }
 
 fn rule_body(rule: &Rule) -> AResult<TokenStream> {
