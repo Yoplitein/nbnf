@@ -334,25 +334,13 @@ fn test_rustsrc() {
 			(rest, res)
 		})
 	};
-	
-	assert_eq!(
-		parse("<>"),
-		Ok(("", "")),
-	);
-	assert_eq!(
-		parse("<<>>"),
-		Ok(("", "<>")),
-	);
+
+	assert_eq!(parse("<>"), Ok(("", "")),);
+	assert_eq!(parse("<<>>"), Ok(("", "<>")),);
 	assert!(parse("<<>").is_err());
-	assert_eq!(
-		parse("<foo>"),
-		Ok(("", "foo")),
-	);
+	assert_eq!(parse("<foo>"), Ok(("", "foo")),);
 	// eventually we may want to disallow this actually
-	assert_eq!(
-		parse("<({>"),
-		Ok(("", "({")),
-	);
+	assert_eq!(parse("<({>"), Ok(("", "({")),);
 }
 
 fn identifier(input: &str) -> PResult<String> {

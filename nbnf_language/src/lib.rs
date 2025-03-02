@@ -9,7 +9,7 @@ use std::ops::RangeInclusive;
 
 pub use crate::generator::{generate_parser, generate_parser_tokens};
 pub use crate::lexer::Token;
-pub use crate::parser::{Grammar, Rule};
+pub use crate::parser::{Expr, Grammar};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {

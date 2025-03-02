@@ -4,8 +4,10 @@ use std::fmt::Write;
 use anyhow::{ensure, Result as AResult};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use syn::Path;
 
-use crate::{Grammar, Literal, Rule};
+use crate::parser::MapFunc;
+use crate::{Expr, Grammar, Literal};
 
 pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	let module = generate_parser_tokens(grammar)?;
@@ -20,12 +22,13 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	};
 
 	for (rule_name, rule) in &grammar.rules {
-		let parser = rule_body(&rule)?;
+		let parser = expr_body(&rule.body)?;
 		let rule_ident = raw_ident(&rule_name);
+		let output_type: syn::Type = syn::parse_str(&rule.output_type)?;
 		module = quote! {
 			#module
 
-			fn #rule_ident(input: &str) -> nom::IResult<&str, &str> {
+			fn #rule_ident(input: &str) -> nom::IResult<&str, #output_type> {
 				let (input, output) = #parser.parse(input)?;
 				Ok((input, output))
 			}
@@ -35,32 +38,54 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	Ok(module)
 }
 
-fn rule_body(rule: &Rule) -> AResult<TokenStream> {
-	match rule {
-		Rule::Literal(v) => literal(v),
-		Rule::Rule(rule_name) => {
+fn expr_body(body: &Expr) -> AResult<TokenStream> {
+	match body {
+		Expr::Literal(v) => literal(v),
+		Expr::Rule(rule_name) => {
 			let rule_ident = raw_ident(rule_name);
 			Ok(quote! { #rule_ident })
 		},
-		Rule::Group(rules) | Rule::Alternate(rules) => {
-			group_or_alternate(matches!(rule, Rule::Group(_)), rules)
+		Expr::Group(exprs) | Expr::Alternate(exprs) => {
+			group_or_alternate(matches!(body, Expr::Group(_)), exprs)
 		},
-		&Rule::Repeat { ref rule, min, max } => repeat(rule, min, max),
-		Rule::Not(inner) => {
-			let inner = rule_body(inner)?;
+		&Expr::Repeat { ref expr, min, max } => repeat(expr, min, max),
+		Expr::Not(inner) => {
+			let inner = expr_body(inner)?;
 			Ok(quote! {
 				nom::combinator::not(#inner)
 			})
 		},
-		Rule::Recognize(inner) => {
-			let inner = rule_body(inner)?;
+		Expr::Recognize(inner) => {
+			let inner = expr_body(inner)?;
 			Ok(quote! {
 				nom::combinator::recognize(#inner)
 			})
 		},
-		Rule::Epsilon => Ok(quote! {
+		Expr::Epsilon => Ok(quote! {
 			nom::combinator::success(())
 		}),
+		Expr::Map {
+			expr,
+			func,
+			mapping_code,
+		} => {
+			let expr = expr_body(expr)?;
+			let func_ident = path(match func {
+				MapFunc::Value => "nom::combinator::value",
+				MapFunc::Map => "nom::combinator::map",
+				MapFunc::MapOpt => "nom::combinator::map_opt",
+				MapFunc::MapRes => "nom::combinator::map_res",
+			})?;
+			let mapping_code: syn::Expr = syn::parse_str(&mapping_code)?;
+			Ok(match func {
+				MapFunc::Value => quote! {
+					#func_ident(#mapping_code, #expr)
+				},
+				_ => quote! {
+					#func_ident(#expr, #mapping_code)
+				},
+			})
+		},
 	}
 }
 
@@ -110,18 +135,18 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 	})
 }
 
-fn group_or_alternate(is_group: bool, rules: &[Rule]) -> AResult<TokenStream> {
+fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
 	ensure!(
-		rules.len() > 1,
+		exprs.len() > 1,
 		"encountered invalid group/alternate with less than two elements"
 	);
 
 	let mut seq = quote! {};
-	for child in rules {
+	for child in exprs {
 		if !seq.is_empty() {
 			seq = quote! { #seq, };
 		}
-		let parser = rule_body(child)?;
+		let parser = expr_body(child)?;
 		seq = quote! { #seq #parser };
 	}
 
@@ -136,8 +161,8 @@ fn group_or_alternate(is_group: bool, rules: &[Rule]) -> AResult<TokenStream> {
 	Ok(seq)
 }
 
-fn repeat(rule: &Rule, min: usize, max: Option<usize>) -> AResult<TokenStream> {
-	let inner = rule_body(rule)?;
+fn repeat(expr: &Expr, min: usize, max: Option<usize>) -> AResult<TokenStream> {
+	let inner = expr_body(expr)?;
 	Ok(match (min, max) {
 		(0, Some(1)) => quote! {
 			nom::combinator::opt(#inner)
@@ -171,4 +196,8 @@ fn ident(ident: &str) -> Ident {
 
 fn raw_ident(ident: &str) -> Ident {
 	Ident::new_raw(ident, Span::call_site())
+}
+
+fn path(path: &str) -> AResult<Path> {
+	Ok(syn::parse_str(path)?)
 }

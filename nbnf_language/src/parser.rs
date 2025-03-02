@@ -13,19 +13,50 @@ pub struct Grammar {
 }
 
 #[derive(Clone, Debug)]
-pub enum Rule {
+pub struct Rule {
+	pub output_type: String,
+	pub body: Expr,
+}
+
+#[derive(Clone, Debug)]
+pub enum Expr {
 	Literal(Literal),
 	Rule(String),
-	Group(Vec<Rule>),
-	Alternate(Vec<Rule>),
+	Group(Vec<Expr>),
+	Alternate(Vec<Expr>),
 	Repeat {
-		rule: Box<Rule>,
+		expr: Box<Expr>,
 		min: usize,
 		max: Option<usize>,
 	},
-	Not(Box<Rule>),
-	Recognize(Box<Rule>),
+	Not(Box<Expr>),
+	Recognize(Box<Expr>),
 	Epsilon,
+	Map {
+		expr: Box<Expr>,
+		func: MapFunc,
+		mapping_code: String,
+	},
+}
+
+#[derive(Clone, Debug)]
+pub enum MapFunc {
+	Value,
+	Map,
+	MapOpt,
+	MapRes,
+}
+
+impl From<Token> for MapFunc {
+	fn from(token: Token) -> Self {
+		match token {
+			Token::Value => Self::Value,
+			Token::Value => Self::Value,
+			Token::Value => Self::Value,
+			Token::Value => Self::Value,
+			_ => panic!("no MapFunc for {token:?}"),
+		}
+	}
 }
 
 pub fn parse(tokens: Vec<Token>) -> AResult<Grammar> {
@@ -73,18 +104,28 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				top_rule = Some(rule_name.clone());
 			}
 
+			let output_type = match self.peek() {
+				Some(Token::RustSrc(_)) => {
+					let Some(Token::RustSrc(ty)) = self.pop() else {
+						unreachable!()
+					};
+					ty
+				},
+				_ => "&str".into(),
+			};
+
 			self.expect(Token::Equals)?;
-			let rule_body = self.parse_rule_body()?;
+			let body = self.parse_expr()?;
 			self.expect(Token::Semicolon)?;
-			rules.insert(rule_name, rule_body);
+			rules.insert(rule_name, Rule { output_type, body });
 		}
 		let top_rule = top_rule.unwrap();
 		Ok(Grammar { top_rule, rules })
 	}
 
-	fn parse_rule_body(&mut self) -> AResult<Rule> {
+	fn parse_expr(&mut self) -> AResult<Expr> {
 		let mut alts = vec![];
-		let mut atoms = vec![];
+		let mut exprs = vec![];
 		let mut pending_modifiers = HashSet::new();
 		let mut last_len = usize::MAX;
 		while self.peek().is_some() {
@@ -98,9 +139,9 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			last_len = len;
 
 			match self.parse_operand() {
-				Ok(atom) => {
-					atoms.push(atom);
-					self.process_modifiers(&mut atoms, &mut pending_modifiers);
+				Ok(expr) => {
+					exprs.push(expr);
+					self.process_modifiers(&mut exprs, &mut pending_modifiers);
 					continue;
 				},
 				Err(_) => {},
@@ -110,21 +151,21 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			match token {
 				Token::GroupOpen => {
 					let group = self.parse_group()?;
-					atoms.push(group);
+					exprs.push(group);
 				},
 				Token::Slash => {
 					self.pop().unwrap_or_else(|| unreachable!());
-					match atoms.len() {
+					match exprs.len() {
 						0 => bail!("found alternate with illegal leading slash"),
 						1 => {
-							let Some(atom) = atoms.pop() else {
+							let Some(expr) = exprs.pop() else {
 								unreachable!()
 							};
-							alts.push(atom);
+							alts.push(expr);
 						},
 						_ => {
-							alts.push(Rule::Group(atoms));
-							atoms = vec![];
+							alts.push(Expr::Group(exprs));
+							exprs = vec![];
 						},
 					}
 				},
@@ -132,12 +173,12 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					let Some(Token::Repeat { min, max }) = self.pop() else {
 						unreachable!()
 					};
-					let Some(last) = atoms.pop() else {
+					let Some(last) = exprs.pop() else {
 						bail!("found repeat at start of rule body/group")
 					};
 					let last = last.into();
-					atoms.push(Rule::Repeat {
-						rule: last,
+					exprs.push(Expr::Repeat {
+						expr: last,
 						min,
 						max,
 					})
@@ -152,37 +193,58 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					pending_modifiers.insert(Modifier::Recognize);
 					continue;
 				},
+				Token::Value | Token::Map | Token::MapOpt | Token::MapRes => {
+					let Some(token) = self.pop() else {
+						unreachable!()
+					};
+					let Token::RustSrc(mapping_code) =
+						self.expect(Token::RustSrc(String::new()))?
+					else {
+						unreachable!()
+					};
+					let Some(expr) = exprs.pop() else {
+						bail!("found mapping function without any expression to map")
+					};
+					let expr = Box::new(expr);
+					let func = token.into();
+					exprs.push(Expr::Map {
+						func,
+						mapping_code,
+						expr,
+					});
+					continue;
+				},
 				Token::Semicolon | Token::GroupClose => {
 					break;
 				},
 				_ => bail!("got unexpected {token:?} when parsing rule body"),
 			}
 
-			self.process_modifiers(&mut atoms, &mut pending_modifiers);
+			self.process_modifiers(&mut exprs, &mut pending_modifiers);
 		}
 		Ok(if !alts.is_empty() {
 			ensure!(
-				!atoms.is_empty(),
+				!exprs.is_empty(),
 				"found alternate with illegal trailing slash"
 			);
-			match atoms.len() {
+			match exprs.len() {
 				0 => bail!("found alternate with illegal trailing slash"),
 				1 => {
-					let Some(atom) = atoms.pop() else {
+					let Some(expr) = exprs.pop() else {
 						unreachable!()
 					};
-					alts.push(atom);
+					alts.push(expr);
 				},
 				_ => {
-					alts.push(Rule::Group(atoms));
+					alts.push(Expr::Group(exprs));
 				},
 			}
-			Rule::Alternate(alts)
+			Expr::Alternate(alts)
 		} else {
-			if atoms.len() != 1 {
-				Rule::Group(atoms)
+			if exprs.len() != 1 {
+				Expr::Group(exprs)
 			} else {
-				let Some(rule) = atoms.into_iter().next() else {
+				let Some(rule) = exprs.into_iter().next() else {
 					unreachable!()
 				};
 				rule
@@ -192,36 +254,36 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 
 	fn process_modifiers(
 		&mut self,
-		atoms: &mut Vec<Rule>,
+		exprs: &mut Vec<Expr>,
 		pending_modifiers: &mut HashSet<Modifier>,
 	) {
 		let Some(next) = self.peek() else { return };
 		if Self::triggers_modifiers(next) && !pending_modifiers.is_empty() {
-			let Some(mut atom) = atoms.pop() else {
-				panic!("trying to process modifiers but no atom to pop")
+			let Some(mut expr) = exprs.pop() else {
+				panic!("trying to process modifiers but no expression to pop")
 			};
 
 			if pending_modifiers.contains(&Modifier::Not) {
-				atom = Rule::Not(atom.into());
+				expr = Expr::Not(expr.into());
 				pending_modifiers.remove(&Modifier::Not);
 			}
 			if pending_modifiers.contains(&Modifier::Recognize) {
-				atom = Rule::Recognize(atom.into());
+				expr = Expr::Recognize(expr.into());
 				pending_modifiers.remove(&Modifier::Recognize);
 			}
 
-			atoms.push(atom);
+			exprs.push(expr);
 		}
 	}
 
-	fn parse_group(&mut self) -> AResult<Rule> {
+	fn parse_group(&mut self) -> AResult<Expr> {
 		self.expect(Token::GroupOpen)?;
-		let body = self.parse_rule_body()?;
+		let body = self.parse_expr()?;
 		self.expect(Token::GroupClose)?;
 		Ok(body)
 	}
 
-	fn parse_operand(&mut self) -> AResult<Rule> {
+	fn parse_operand(&mut self) -> AResult<Expr> {
 		let Some(token) = self.peek() else {
 			bail!("trying to parse rule operand but got eof")
 		};
@@ -230,19 +292,19 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				let Some(Token::Identifier(rule_name)) = self.pop() else {
 					unreachable!()
 				};
-				Rule::Rule(rule_name)
+				Expr::Rule(rule_name)
 			},
 			Token::Literal(_) => {
 				let Some(Token::Literal(literal)) = self.pop() else {
 					unreachable!()
 				};
-				Rule::Literal(literal)
+				Expr::Literal(literal)
 			},
 			Token::Epsilon => {
 				let Some(_) = self.pop() else { unreachable!() };
-				Rule::Epsilon
+				Expr::Epsilon
 			},
-			_ => bail!("expecting rule atom but got {token:?}"),
+			_ => bail!("expecting rule expr but got {token:?}"),
 		})
 	}
 
