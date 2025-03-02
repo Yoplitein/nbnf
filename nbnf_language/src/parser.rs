@@ -315,6 +315,10 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			Token::Slash |
 			Token::Semicolon |
 			Token::GroupOpen |
+			Token::Value |
+			Token::Map |
+			Token::MapOpt |
+			Token::MapRes |
 			Token::Epsilon => true,
 			_ => false,
 		}
