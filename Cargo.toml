@@ -1,3 +1,13 @@
+[package]
+name = "nbnf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nbnf_language = { path = "./nbnf_language" }
+nbnf_macro = { path = "./nbnf_macro" }
+nom = "8"
+
 [workspace]
 resolver = "2"
-members = ["nbnf_language", "nbnf_macro"]
+members = [ "nbnf_language", "nbnf_macro" ]
