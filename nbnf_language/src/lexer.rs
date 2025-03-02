@@ -71,6 +71,7 @@ fn token(input: &str) -> PResult<Token> {
 		value(Token::Semicolon, tag(";")),
 		value(Token::GroupOpen, tag("(")),
 		value(Token::GroupClose, tag(")")),
+		value(Token::Not, tag("!")),
 		value(Token::Recognize, tag("~")),
 		value(Token::Epsilon, tag("&")),
 		value(Token::Value, tag("@")),
