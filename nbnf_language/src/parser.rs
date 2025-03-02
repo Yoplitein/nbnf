@@ -51,9 +51,9 @@ impl From<Token> for MapFunc {
 	fn from(token: Token) -> Self {
 		match token {
 			Token::Value => Self::Value,
-			Token::Value => Self::Value,
-			Token::Value => Self::Value,
-			Token::Value => Self::Value,
+			Token::Map => Self::Map,
+			Token::MapOpt => Self::MapOpt,
+			Token::MapRes => Self::MapRes,
 			_ => panic!("no MapFunc for {token:?}"),
 		}
 	}
