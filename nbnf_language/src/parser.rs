@@ -189,23 +189,19 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 	
 	fn process_modifiers(&mut self, atoms: &mut Vec<Rule>, pending_modifiers: &mut HashSet<Modifier>) {
 		let Some(next) = self.peek() else { return };
-		dbg!(next, &pending_modifiers);
 		if Self::triggers_modifiers(next) && !pending_modifiers.is_empty() {
 			let Some(mut atom) = atoms.pop() else {
 				panic!("trying to process modifiers but no atom to pop")
 			};
 			
-			dbg!(&atom);
 			if pending_modifiers.contains(&Modifier::Not) {
 				atom = Rule::Not(atom.into());
 				pending_modifiers.remove(&Modifier::Not);
 			}
-			dbg!(&atom);
 			if pending_modifiers.contains(&Modifier::Recognize) {
 				atom = Rule::Recognize(atom.into());
 				pending_modifiers.remove(&Modifier::Recognize);
 			}
-			dbg!(&atom);
 			
 			atoms.push(atom);
 		}
