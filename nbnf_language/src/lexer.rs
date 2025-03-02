@@ -75,9 +75,9 @@ fn token(input: &str) -> PResult<Token> {
 		value(Token::Recognize, tag("~")),
 		value(Token::Epsilon, tag("&")),
 		value(Token::Value, tag("@")),
-		value(Token::Map, tag("|")),
 		value(Token::MapOpt, tag("|?")),
 		value(Token::MapRes, tag("|!")),
+		value(Token::Map, tag("|")),
 	))
 	.parse(input)
 }
