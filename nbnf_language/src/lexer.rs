@@ -4,9 +4,9 @@ use std::ops::RangeInclusive;
 use anyhow::{anyhow, bail, ensure, Result as AResult};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take, take_while, take_while1};
-use nom::character::{anychar, char};
+use nom::character::complete::{anychar, char};
 use nom::character::complete::usize;
-use nom::combinator::{cut, eof, map, map_res, opt, recognize, value, verify};
+use nom::combinator::{complete, cut, eof, map, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
 use nom::multi::{
 	count,
@@ -45,7 +45,7 @@ pub enum Token {
 }
 
 pub fn lex(input: &str) -> anyhow::Result<Vec<Token>> {
-	let res = top.parse(input).finish();
+	let res = complete(top).parse(input).finish();
 	let res = res.map_err(|err| anyhow::anyhow!("{err:#?}"));
 	let (_, res) = res?;
 	Ok(res)
@@ -126,7 +126,7 @@ fn literal_range(input: &str) -> PResult<Token> {
 		};
 		Ok((input, CharOrRange::Range(start ..= end)))
 	}
-	
+
 	let (input, _) = whitespace.parse(input)?;
 	let (input, _) = tag("[").parse(input)?;
 
