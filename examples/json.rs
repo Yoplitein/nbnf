@@ -39,7 +39,7 @@ nbnf!(r#"
 		"false"@<Json::Bool(false)>;
 	number<Json> =
 		~([0-9]+)
-		|<|str| <i128 as std::str::FromStr>::from_str(str).map(Json::Number).unwrap()>;
+		|!<|str| i128::from_str_radix(str, 10).map(Json::Number)>;
 	string<String> =
 		(-'"' string_inner* -'"')
 		|<String::from_iter>;
