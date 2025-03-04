@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use nbnf_macro::nbnf;
 use nom::bytes::complete::take_while;
@@ -8,15 +8,22 @@ use nom::multi::separated_list0;
 use nom::IResult;
 
 fn main() {
-	let input = r#"[1, "two", {"three": false}, null, "abc \"def\" ghi\n"]"#;
+	let input = r#"[1, 2.3, "four", {"five": false, "six": 7}, null, "abc \"def\" ghi\n"]"#;
+	// let input = r#"1.0"#;
 	_ = dbg!(json.parse(input));
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Number {
+	Int(i128),
+	Float(f64),
 }
 
 #[derive(Clone, Debug)]
 pub enum Json {
 	Null,
 	Bool(bool),
-	Number(i128),
+	Number(Number),
 	String(String),
 	Array(Vec<Json>),
 	Object(HashMap<String, Json>),
@@ -33,13 +40,25 @@ nbnf!(r#"
 		array /
 		object /
 		nom::combinator::eof@<Json::Null>;
+
 	null<Json> = "null"@<Json::Null>;
 	boolean<Json> =
 		"true"@<Json::Bool(true)> /
 		"false"@<Json::Bool(false)>;
+
 	number<Json> =
+		(number_float / number_int / number_hex)
+		|<Json::Number>;
+	number_float<Number> =
+		~([0-9]+ '.' [0-9]*)
+		|!<|str| f64::from_str(str).map(Number::Float)>;
+	number_int<Number> =
 		~([0-9]+)
-		|!<|str| i128::from_str_radix(str, 10).map(Json::Number)>;
+		|!<|str| i128::from_str(str).map(Number::Int)>;
+	number_hex<Number> =
+		(-('0' [xX]) ~([0-9a-fA-F]+))
+		|!<|str| i128::from_str_radix(str, 16).map(Number::Int)>;
+
 	string<String> =
 		(-'"' string_inner* -'"')
 		|<String::from_iter>;
@@ -51,9 +70,11 @@ nbnf!(r#"
 		"\\0"@<'\0'> /
 		"\\"@<'\\'> /
 		[^"];
+
 	array<Json> =
 		(-'[' array_inner -']')
 		|<Json::Array>;
+
 	object<Json> =
 		(-'{' object_inner -'}')
 		|<HashMap::from_iter>
