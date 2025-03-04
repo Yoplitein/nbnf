@@ -6,8 +6,8 @@ use std::collections::HashSet;
 use std::ops::RangeInclusive;
 
 pub use crate::generator::{generate_parser, generate_parser_tokens};
-pub use crate::lexer::{Token, lex};
-pub use crate::parser::{Expr, Grammar, parse};
+pub use crate::lexer::{lex, Token};
+pub use crate::parser::{parse, Expr, Grammar};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {

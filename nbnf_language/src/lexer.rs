@@ -5,7 +5,7 @@ use anyhow::{bail, ensure, Result as AResult};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while, take_while1};
 use nom::character::complete::{anychar, char, usize};
-use nom::combinator::{complete, cut, eof, map, map_res, opt, recognize, value, verify};
+use nom::combinator::{complete, cut, eof, map, map_opt, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
 use nom::multi::{fold_many1, fold_many_m_n, many0, separated_list0, separated_list1};
 use nom::{Finish, Offset, Parser};
@@ -85,8 +85,20 @@ fn token(input: &str) -> PResult<Token> {
 fn literal_range(input: &str) -> PResult<Token> {
 	#[derive(Clone, Debug)]
 	enum CharOrRange {
+		Whitespace,
 		Char(char),
 		Range(RangeInclusive<char>),
+	}
+
+	fn ws(input: &str) -> PResult<CharOrRange> {
+		map_opt(anychar, |c| {
+			Some(match c {
+				' ' => CharOrRange::Char(' '),
+				c if c.is_whitespace() => CharOrRange::Whitespace,
+				_ => return None,
+			})
+		})
+		.parse(input)
 	}
 
 	fn char(input: &str) -> PResult<CharOrRange> {
@@ -122,14 +134,15 @@ fn literal_range(input: &str) -> PResult<Token> {
 	let (input, invert) = opt(tag("^")).parse(input)?;
 	let invert = invert.is_some();
 
-	let (input, chars_and_ranges) = many0(alt((range, bracket_escape, char))).parse(input)?;
+	let (input, chars_and_ranges) = many0(alt((ws, range, bracket_escape, char))).parse(input)?;
 	let mut chars = HashSet::new();
 	let mut ranges = HashSet::new();
 	for v in chars_and_ranges {
 		match v {
-			CharOrRange::Char(char) => chars.insert(char),
-			CharOrRange::Range(range) => ranges.insert(range),
-		};
+			CharOrRange::Whitespace => {},
+			CharOrRange::Char(char) => _ = chars.insert(char),
+			CharOrRange::Range(range) => _ = ranges.insert(range),
+		}
 	}
 
 	let (input, _) = tag("]").parse(input)?;
@@ -322,6 +335,28 @@ fn test_literal_range() {
 			Token::Literal(Literal::Range {
 				chars: HashSet::new(),
 				ranges: HashSet::from_iter(['\u{1010}' ..= '\u{2020}']),
+				invert: false,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range("[\n\t]"),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: HashSet::new(),
+				ranges: HashSet::new(),
+				invert: false,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range("[ ]"),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: HashSet::from_iter([' ']),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
