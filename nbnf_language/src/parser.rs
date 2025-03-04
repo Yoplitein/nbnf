@@ -212,6 +212,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					continue;
 				},
 				Token::Semicolon | Token::GroupClose => {
+					self.process_modifiers(&mut exprs, &mut pending_modifiers);
 					break;
 				},
 				_ => bail!("got unexpected {token:?} when parsing rule body"),
@@ -219,6 +220,8 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 
 			self.process_modifiers(&mut exprs, &mut pending_modifiers);
 		}
+
+		ensure!(pending_modifiers.is_empty(), "unprocessed modifiers: {pending_modifiers:?}");
 		Ok(if !alts.is_empty() {
 			ensure!(
 				!exprs.is_empty(),
@@ -252,8 +255,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 		exprs: &mut Vec<Expr>,
 		pending_modifiers: &mut HashSet<Modifier>,
 	) {
-		let Some(next) = self.peek() else { return };
-		if Self::triggers_modifiers(next) && !pending_modifiers.is_empty() {
+		if !pending_modifiers.is_empty() {
 			let Some(mut expr) = exprs.pop() else {
 				panic!("trying to process modifiers but no expression to pop")
 			};
@@ -266,6 +268,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				expr = Expr::Recognize(expr.into());
 				pending_modifiers.remove(&Modifier::Recognize);
 			}
+			assert!(pending_modifiers.is_empty(), "unimplemented modifiers: {pending_modifiers:?}");
 
 			exprs.push(expr);
 		}
@@ -301,19 +304,5 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			},
 			_ => bail!("expecting rule expr but got {token:?}"),
 		})
-	}
-
-	fn triggers_modifiers(token: &Token) -> bool {
-		matches!(
-			token,
-			Token::Rule(_) |
-				Token::Literal(_) |
-				Token::Slash | Token::Semicolon |
-				Token::GroupOpen |
-				Token::Value | Token::Map |
-				Token::MapOpt |
-				Token::MapRes |
-				Token::Epsilon
-		)
 	}
 }
