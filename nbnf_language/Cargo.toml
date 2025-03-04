@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { version = "1", features = ["backtrace"] }
-nom = "8"
+anyhow = { workspace = true }
+nom = { workspace =  true }
 nom-language = "0"
 prettyplease = "0"
 proc-macro2 = "1"
-quote = "1"
-syn = { version = "2", features = ["full"] }
+quote = { workspace =  true }
+syn = { workspace =  true }

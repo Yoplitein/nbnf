@@ -7,7 +7,7 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-anyhow = { version = "1", features = ["backtrace"] }
-nbnf_language = { path = "../nbnf_language" }
-quote = "1"
-syn = { version = "2", features = ["full"] }
+anyhow = { workspace = true }
+nbnf_language = { workspace =  true }
+quote = { workspace =  true }
+syn = { workspace =  true }

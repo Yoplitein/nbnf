@@ -4,10 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nbnf_language = { path = "./nbnf_language" }
-nbnf_macro = { path = "./nbnf_macro" }
-nom = "8"
+nbnf_language = { workspace = true }
+nbnf_macro = { workspace = true }
+nom = { workspace = true }
 
 [workspace]
 resolver = "2"
 members = [ "nbnf_language", "nbnf_macro" ]
+
+[workspace.dependencies]
+anyhow = { version = "1", features = ["backtrace"] }
+nbnf_language = { path = "./nbnf_language" }
+nbnf_macro = { path = "./nbnf_macro" }
+nom = "8"
+quote = "1"
+syn = { version = "2", features = ["full"] }
