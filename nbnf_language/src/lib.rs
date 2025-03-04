@@ -5,8 +5,8 @@ pub mod parser;
 use std::ops::RangeInclusive;
 
 pub use crate::generator::{generate_parser, generate_parser_tokens};
-pub use crate::lexer::Token;
-pub use crate::parser::{Expr, Grammar};
+pub use crate::lexer::{Token, lex};
+pub use crate::parser::{Expr, Grammar, parse};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {
