@@ -138,13 +138,10 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			}
 			last_len = len;
 
-			match self.parse_operand() {
-				Ok(expr) => {
-					exprs.push(expr);
-					self.process_modifiers(&mut exprs, &mut pending_modifiers);
-					continue;
-				},
-				Err(_) => {},
+			if let Ok(expr) = self.parse_operand() {
+				exprs.push(expr);
+				self.process_modifiers(&mut exprs, &mut pending_modifiers);
+				continue;
 			}
 
 			let Some(token) = self.peek() else { break };
@@ -240,15 +237,13 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				},
 			}
 			Expr::Alternate(alts)
+		} else if exprs.len() != 1 {
+			Expr::Group(exprs)
 		} else {
-			if exprs.len() != 1 {
-				Expr::Group(exprs)
-			} else {
-				let Some(rule) = exprs.into_iter().next() else {
-					unreachable!()
-				};
-				rule
-			}
+			let Some(rule) = exprs.into_iter().next() else {
+				unreachable!()
+			};
+			rule
 		})
 	}
 
@@ -309,18 +304,16 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 	}
 
 	fn triggers_modifiers(token: &Token) -> bool {
-		match token {
+		matches!(
+			token,
 			Token::Rule(_) |
-			Token::Literal(_) |
-			Token::Slash |
-			Token::Semicolon |
-			Token::GroupOpen |
-			Token::Value |
-			Token::Map |
-			Token::MapOpt |
-			Token::MapRes |
-			Token::Epsilon => true,
-			_ => false,
-		}
+				Token::Literal(_) |
+				Token::Slash | Token::Semicolon |
+				Token::GroupOpen |
+				Token::Value | Token::Map |
+				Token::MapOpt |
+				Token::MapRes |
+				Token::Epsilon
+		)
 	}
 }

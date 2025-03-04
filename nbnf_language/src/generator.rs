@@ -20,7 +20,7 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 
 	for (rule_name, rule) in &grammar.rules {
 		let parser = expr_body(&rule.body)?;
-		let rule_ident = raw_ident(&rule_name);
+		let rule_ident = raw_ident(rule_name);
 		let output_type: syn::Type = syn::parse_str(&rule.output_type)?;
 		module = quote! {
 			#module
@@ -73,7 +73,7 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 				MapFunc::MapOpt => "nom::combinator::map_opt",
 				MapFunc::MapRes => "nom::combinator::map_res",
 			})?;
-			let mapping_code: syn::Expr = syn::parse_str(&mapping_code)
+			let mapping_code: syn::Expr = syn::parse_str(mapping_code)
 				.context(format!("failed to parse mapping code `{mapping_code}`"))?;
 			Ok(match func {
 				MapFunc::Value => quote! {
@@ -213,5 +213,5 @@ fn raw_ident(ident: &str) -> Ident {
 }
 
 fn path(path: &str) -> AResult<Path> {
-	Ok(syn::parse_str(path).context("couldn't parse Rust item path")?)
+	syn::parse_str(path).context("couldn't parse Rust item path")
 }
