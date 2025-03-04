@@ -34,8 +34,7 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 			#module
 
 			fn #rule_ident(input: &str) -> nbnf::nom::IResult<&str, #output_type> {
-				let (input, output) = #parser.parse(input)?;
-				Ok((input, output))
+				#parser.parse(input)
 			}
 		};
 	}

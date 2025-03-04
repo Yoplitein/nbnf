@@ -326,7 +326,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				Expr::Literal(literal)
 			},
 			Token::Epsilon => {
-				let Some(_) = self.pop() else { unreachable!() };
+				self.pop().unwrap_or_else(|| unreachable!());
 				Expr::Epsilon
 			},
 			_ => bail!("expecting rule expr but got {token:?}"),
