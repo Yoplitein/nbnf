@@ -24,9 +24,7 @@ pub enum Json {
 
 #[rustfmt::skip]
 nbnf!(r#"
-	json<Json> =
-		(ws json_inner ws)
-		|<|(_, v, _)| v>;
+	json<Json> = -ws json_inner -ws;
 	json_inner<Json> =
 		null /
 		boolean /
@@ -43,8 +41,8 @@ nbnf!(r#"
 		~([0-9]+)
 		|<|str| <i128 as std::str::FromStr>::from_str(str).map(Json::Number).unwrap()>;
 	string<String> =
-		('"' string_inner* '"')
-		|<|(_, chars, _)| String::from_iter(chars)>;
+		(-'"' string_inner* -'"')
+		|<String::from_iter>;
 	string_inner<char> =
 		"\\\""@<'"'> /
 		"\\n"@<'\n'> /
@@ -54,15 +52,14 @@ nbnf!(r#"
 		"\\"@<'\\'> /
 		[^"];
 	array<Json> =
-		('[' array_inner ']')
-		|<|(_, xs, _)| Json::Array(xs)>;
+		(-'[' array_inner -']')
+		|<Json::Array>;
 	object<Json> =
-		('{' object_pairs '}')
-		|<|(_, xs, _)| Json::Object(xs.into_iter().collect())>;
+		(-'{' object_pairs -'}')
+		|<HashMap::from_iter>
+		|<Json::Object>;
 	object_pairs<Vec<(String, Json)>> = object_pair*;
-	object_pair<(String, Json)> =
-		(string ':' json)
-		|<|(k, _, v)| (k, v)>;
+	object_pair<(String, Json)> = string -':' json;
 "#);
 
 fn array_inner(input: &str) -> IResult<&str, Vec<Json>> {
