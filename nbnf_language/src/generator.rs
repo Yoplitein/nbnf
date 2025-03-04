@@ -20,7 +20,7 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 
 pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
-		use nom::Parser;
+		use nbnf::nom::Parser;
 	};
 
 	for (rule_name, rule) in &grammar.rules {
@@ -30,7 +30,7 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 		module = quote! {
 			#module
 
-			fn #rule_ident(input: &str) -> nom::IResult<&str, #output_type> {
+			fn #rule_ident(input: &str) -> nbnf::nom::IResult<&str, #output_type> {
 				let (input, output) = #parser.parse(input)?;
 				Ok((input, output))
 			}
@@ -54,17 +54,17 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 		Expr::Not(inner) => {
 			let inner = expr_body(inner)?;
 			Ok(quote! {
-				nom::combinator::not(#inner)
+				nbnf::nom::combinator::not(#inner)
 			})
 		},
 		Expr::Recognize(inner) => {
 			let inner = expr_body(inner)?;
 			Ok(quote! {
-				nom::combinator::recognize(#inner)
+				nbnf::nom::combinator::recognize(#inner)
 			})
 		},
 		Expr::Epsilon => Ok(quote! {
-			nom::combinator::success(())
+			nbnf::nom::combinator::success(())
 		}),
 		Expr::Map {
 			expr,
@@ -73,10 +73,10 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 		} => {
 			let expr = expr_body(expr)?;
 			let func_ident = path(match func {
-				MapFunc::Value => "nom::combinator::value",
-				MapFunc::Map => "nom::combinator::map",
-				MapFunc::MapOpt => "nom::combinator::map_opt",
-				MapFunc::MapRes => "nom::combinator::map_res",
+				MapFunc::Value => "nbnf::nom::combinator::value",
+				MapFunc::Map => "nbnf::nom::combinator::map",
+				MapFunc::MapOpt => "nbnf::nom::combinator::map_opt",
+				MapFunc::MapRes => "nbnf::nom::combinator::map_res",
 			})?;
 			let mapping_code: syn::Expr = syn::parse_str(mapping_code)
 				.context(format!("failed to parse mapping code `{mapping_code}`"))?;
@@ -95,10 +95,10 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 fn literal(literal: &Literal) -> AResult<TokenStream> {
 	Ok(match literal {
 		Literal::Char(char) => quote! {
-			nom::character::complete::char(#char)
+			nbnf::nom::character::complete::char(#char)
 		},
 		Literal::String(str) => quote! {
-			nom::bytes::complete::tag(#str)
+			nbnf::nom::bytes::complete::tag(#str)
 		},
 		&Literal::Range {
 			ref chars,
@@ -149,8 +149,8 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 				});
 
 			quote! {
-				nom::combinator::verify(
-					nom::character::complete::anychar,
+				nbnf::nom::combinator::verify(
+					nbnf::nom::character::complete::anychar,
 					|&char: &char| #conditions
 				)
 			}
@@ -177,7 +177,7 @@ fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
 		seq = quote! { (#seq) };
 	} else {
 		seq = quote! {
-			nom::branch::alt((#seq))
+			nbnf::nom::branch::alt((#seq))
 		};
 	}
 
@@ -188,25 +188,25 @@ fn repeat(expr: &Expr, min: usize, max: Option<usize>) -> AResult<TokenStream> {
 	let inner = expr_body(expr)?;
 	Ok(match (min, max) {
 		(0, Some(1)) => quote! {
-			nom::combinator::opt(#inner)
+			nbnf::nom::combinator::opt(#inner)
 		},
 		(1, Some(1)) => inner,
 		(min, Some(max)) => quote! {
-			nom::multi::many_m_n(
+			nbnf::nom::multi::many_m_n(
 				#min,
 				#max,
 				#inner,
 			)
 		},
 		(0, None) => quote! {
-			nom::multi::many0(#inner)
+			nbnf::nom::multi::many0(#inner)
 		},
 		(1, None) => quote! {
-			nom::multi::many1(#inner)
+			nbnf::nom::multi::many1(#inner)
 		},
 		(min, None) => quote! {
-			nom::combinator::verify(
-				nom::multi::many0(#inner),
+			nbnf::nom::combinator::verify(
+				nbnf::nom::multi::many0(#inner),
 				|xs: Vec<_>| xs.len() >= #min,
 			)
 		},
