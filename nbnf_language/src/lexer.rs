@@ -1,24 +1,12 @@
-use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
-use anyhow::{anyhow, bail, ensure, Result as AResult};
+use anyhow::{bail, ensure, Result as AResult};
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take, take_while, take_while1};
-use nom::character::complete::{anychar, char};
-use nom::character::complete::usize;
+use nom::bytes::complete::{tag, take_while, take_while1};
+use nom::character::complete::{anychar, char, usize};
 use nom::combinator::{complete, cut, eof, map, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
-use nom::multi::{
-	count,
-	fold_many1,
-	fold_many_m_n,
-	many0,
-	many0_count,
-	many1_count,
-	many_m_n,
-	separated_list0,
-	separated_list1,
-};
+use nom::multi::{fold_many1, fold_many_m_n, many0, separated_list0, separated_list1};
 use nom::{Finish, Offset, Parser};
 use nom_language::error::VerboseError;
 
@@ -113,8 +101,7 @@ fn literal_range(input: &str) -> PResult<Token> {
 	}
 
 	fn bracket_escape(input: &str) -> PResult<CharOrRange> {
-		value(CharOrRange::Char(']'), tag(r"\]"))
-		.parse(input)
+		value(CharOrRange::Char(']'), tag(r"\]")).parse(input)
 	}
 
 	fn range(input: &str) -> PResult<CharOrRange> {
@@ -330,7 +317,6 @@ fn test_literal_range() {
 }
 
 fn repeat(input: &str) -> PResult<Token> {
-	let orig = input;
 	let (input, _) = whitespace.parse(input)?;
 	let (input, _) = tag("{").parse(input)?;
 	let (input, _) = whitespace.parse(input)?;
@@ -345,7 +331,7 @@ fn repeat(input: &str) -> PResult<Token> {
 
 	match (min, max) {
 		(Some(_), Some(Some(_))) => {},
-		(Some(_), Some(none)) => {
+		(Some(_), Some(None)) => {
 			max = None;
 		},
 		(Some(n), None) => {
@@ -473,13 +459,7 @@ fn literal(input: &str) -> PResult<Literal> {
 	let input_start = input;
 	let (input, quote_char) = alt((char('\''), char('"'))).parse(input)?;
 	let (input, body) = fold_many1(
-		alt((
-			escape_char,
-			verify(
-				anychar,
-				|&char| char != quote_char,
-			),
-		)),
+		alt((escape_char, verify(anychar, |&char| char != quote_char))),
 		String::new,
 		|mut str, char| {
 			str.push(char);
@@ -526,7 +506,8 @@ fn escape_char(input: &str) -> PResult<char> {
 		value('\0', tag(r#"\0"#)),
 		hex_escape,
 		unicode_escape,
-	)).parse(input)
+	))
+	.parse(input)
 }
 
 fn hex_char(input: &str) -> PResult<char> {

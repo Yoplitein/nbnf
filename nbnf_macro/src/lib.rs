@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use std::fmt::Write;
 
 use quote::quote;
@@ -8,7 +6,12 @@ use quote::quote;
 pub fn nbnf(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let str: syn::LitStr = match syn::parse(tokens) {
 		Ok(s) => s,
-		Err(err) => return compile_error(None, "grammar must be given as a string"),
+		Err(err) => {
+			return compile_error(
+				None,
+				&format!("grammar must be given as a string ({err:?})"),
+			)
+		},
 	};
 	let str = str.value();
 	let tokens = match nbnf_language::lexer::lex(&str) {

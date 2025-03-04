@@ -1,7 +1,4 @@
-use std::collections::HashSet;
-use std::fmt::Write;
-
-use anyhow::{anyhow, ensure, Context, Result as AResult};
+use anyhow::{ensure, Context, Result as AResult};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::Path;
@@ -209,10 +206,6 @@ fn repeat(expr: &Expr, min: usize, max: Option<usize>) -> AResult<TokenStream> {
 			)
 		},
 	})
-}
-
-fn ident(ident: &str) -> Ident {
-	Ident::new(ident, Span::call_site())
 }
 
 fn raw_ident(ident: &str) -> Ident {

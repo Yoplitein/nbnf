@@ -1,10 +1,7 @@
-#![allow(unused)]
-
 pub mod generator;
 pub mod lexer;
 pub mod parser;
 
-use std::collections::HashMap;
 use std::ops::RangeInclusive;
 
 pub use crate::generator::{generate_parser, generate_parser_tokens};

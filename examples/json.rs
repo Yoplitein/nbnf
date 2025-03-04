@@ -1,17 +1,19 @@
-#![allow(unused)]
-
 use std::collections::HashMap;
 
 use nbnf_macro::nbnf;
-use nom::{branch::alt, bytes::{complete::take_while, tag}, character::anychar, combinator::{value, verify}, multi::separated_list0, IResult};
+use nom::bytes::complete::take_while;
+use nom::bytes::tag;
+use nom::combinator::value;
+use nom::multi::separated_list0;
+use nom::IResult;
 
 fn main() {
 	let input = r#"[1, "two", {"three": false}, null, "abc \"def\" ghi\n"]"#;
-	dbg!(json.parse(input));
+	_ = dbg!(json.parse(input));
 }
 
 #[derive(Clone, Debug)]
-enum Json {
+pub enum Json {
 	Null,
 	Bool(bool),
 	Number(i128),
@@ -20,6 +22,7 @@ enum Json {
 	Object(HashMap<String, Json>),
 }
 
+#[rustfmt::skip]
 nbnf!(r#"
 	json<Json> =
 		(ws json_inner ws)
@@ -63,15 +66,9 @@ nbnf!(r#"
 "#);
 
 fn array_inner(input: &str) -> IResult<&str, Vec<Json>> {
-	separated_list0(
-		tag(","),
-		json
-	).parse(input)
+	separated_list0(tag(","), json).parse(input)
 }
 
 fn ws(input: &str) -> IResult<&str, ()> {
-	value(
-		(),
-		take_while(char::is_whitespace),
-	).parse(input)
+	value((), take_while(char::is_whitespace)).parse(input)
 }
