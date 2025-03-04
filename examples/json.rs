@@ -55,15 +55,18 @@ nbnf!(r#"
 		(-'[' array_inner -']')
 		|<Json::Array>;
 	object<Json> =
-		(-'{' object_pairs -'}')
+		(-'{' object_inner -'}')
 		|<HashMap::from_iter>
 		|<Json::Object>;
-	object_pairs<Vec<(String, Json)>> = object_pair*;
-	object_pair<(String, Json)> = string -':' json;
+	object_pair<(String, Json)> = -ws string -ws -':' -ws json -ws;
 "#);
 
 fn array_inner(input: &str) -> IResult<&str, Vec<Json>> {
 	separated_list0(tag(","), json).parse(input)
+}
+
+fn object_inner(input: &str) -> IResult<&str, Vec<(String, Json)>> {
+	separated_list0(tag(","), object_pair).parse(input)
 }
 
 fn ws(input: &str) -> IResult<&str, ()> {
