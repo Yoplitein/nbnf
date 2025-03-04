@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops::RangeInclusive;
 
 use anyhow::{bail, ensure, Result as AResult};
@@ -122,13 +123,13 @@ fn literal_range(input: &str) -> PResult<Token> {
 	let invert = invert.is_some();
 
 	let (input, chars_and_ranges) = many0(alt((range, bracket_escape, char))).parse(input)?;
-	let mut chars = vec![];
-	let mut ranges = vec![];
+	let mut chars = HashSet::new();
+	let mut ranges = HashSet::new();
 	for v in chars_and_ranges {
 		match v {
-			CharOrRange::Char(char) => chars.push(char),
-			CharOrRange::Range(range) => ranges.push(range),
-		}
+			CharOrRange::Char(char) => chars.insert(char),
+			CharOrRange::Range(range) => ranges.insert(range),
+		};
 	}
 
 	let (input, _) = tag("]").parse(input)?;
@@ -151,8 +152,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec![],
-				ranges: vec![],
+				chars: HashSet::new(),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
@@ -162,8 +163,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['['],
-				ranges: vec![],
+				chars: HashSet::from_iter(['[']),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
@@ -173,8 +174,8 @@ fn test_literal_range() {
 		Ok((
 			"]",
 			Token::Literal(Literal::Range {
-				chars: vec![],
-				ranges: vec![],
+				chars: HashSet::new(),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
@@ -184,8 +185,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec![']'],
-				ranges: vec![],
+				chars: HashSet::from_iter([']']),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
@@ -195,8 +196,19 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['a'],
-				ranges: vec![],
+				chars: HashSet::from_iter(['a']),
+				ranges: HashSet::new(),
+				invert: false,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range("[aa]"),
+		Ok((
+			"",
+			Token::Literal(Literal::Range {
+				chars: HashSet::from_iter(['a']),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
@@ -206,8 +218,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['a', 'b'],
-				ranges: vec![],
+				chars: HashSet::from_iter(['a', 'b']),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
@@ -217,8 +229,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['a'],
-				ranges: vec![],
+				chars: HashSet::from_iter(['a']),
+				ranges: HashSet::new(),
 				invert: true,
 			})
 		)),
@@ -228,8 +240,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['a', '^'],
-				ranges: vec![],
+				chars: HashSet::from_iter(['a', '^']),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
@@ -239,8 +251,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['a'],
-				ranges: vec![],
+				chars: HashSet::from_iter(['a']),
+				ranges: HashSet::new(),
 				invert: true,
 			})
 		)),
@@ -250,8 +262,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec![],
-				ranges: vec![],
+				chars: HashSet::new(),
+				ranges: HashSet::new(),
 				invert: true,
 			})
 		)),
@@ -261,8 +273,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['a'],
-				ranges: vec!['b' ..= 'c'],
+				chars: HashSet::from_iter(['a']),
+				ranges: HashSet::from_iter(['b' ..= 'c']),
 				invert: false,
 			})
 		)),
@@ -272,8 +284,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['a', 'd'],
-				ranges: vec!['b' ..= 'c'],
+				chars: HashSet::from_iter(['a', 'd']),
+				ranges: HashSet::from_iter(['b' ..= 'c']),
 				invert: false,
 			})
 		)),
@@ -283,11 +295,11 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['a', 'd'],
-				ranges: vec![
+				chars: HashSet::from_iter(['a', 'd']),
+				ranges: HashSet::from_iter([
 					'b' ..= 'c',
 					'e' ..= 'f'
-				],
+				]),
 				invert: false,
 			})
 		)),
@@ -297,8 +309,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec!['\n', '\r', '\t', '\0', '\\', '\x7F', '\u{BEEF}'],
-				ranges: vec![],
+				chars: HashSet::from_iter(['\n', '\r', '\t', '\0', '\\', '\x7F', '\u{BEEF}']),
+				ranges: HashSet::new(),
 				invert: false,
 			})
 		)),
@@ -308,8 +320,8 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: vec![],
-				ranges: vec!['\u{1010}' ..= '\u{2020}'],
+				chars: HashSet::new(),
+				ranges: HashSet::from_iter(['\u{1010}' ..= '\u{2020}']),
 				invert: false,
 			})
 		)),

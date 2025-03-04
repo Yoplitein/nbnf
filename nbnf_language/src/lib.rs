@@ -2,6 +2,7 @@ pub mod generator;
 pub mod lexer;
 pub mod parser;
 
+use std::collections::HashSet;
 use std::ops::RangeInclusive;
 
 pub use crate::generator::{generate_parser, generate_parser_tokens};
@@ -13,8 +14,8 @@ pub enum Literal {
 	Char(char),
 	String(String),
 	Range {
-		chars: Vec<char>,
-		ranges: Vec<RangeInclusive<char>>,
+		chars: HashSet<char>,
+		ranges: HashSet<RangeInclusive<char>>,
 		invert: bool,
 	},
 }
