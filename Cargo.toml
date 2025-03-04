@@ -8,6 +8,9 @@ nbnf_language = { workspace = true }
 nbnf_macro = { workspace = true }
 nom = { workspace = true }
 
+[features]
+prettyplease = ["nbnf_language/prettyplease"]
+
 [workspace]
 resolver = "2"
 members = [ "nbnf_language", "nbnf_macro" ]

@@ -8,8 +8,13 @@ use crate::{Expr, Grammar, Literal};
 
 pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	let module = generate_parser_tokens(grammar)?;
-	let file = syn::parse2(module)?;
-	let res = prettyplease::unparse(&file);
+	#[cfg(feature = "prettyplease")]
+	let res = {
+		let file = syn::parse2(module)?;
+		prettyplease::unparse(&file)
+	};
+	#[cfg(not(feature = "prettyplease"))]
+	let res = module.to_string();
 	Ok(res)
 }
 
