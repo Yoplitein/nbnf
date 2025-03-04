@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::{ensure, Context, Result as AResult};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -63,6 +65,10 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 			Ok(quote! {
 				nbnf::nom::combinator::recognize(#inner)
 			})
+		},
+		Expr::Discard(_) => {
+			// discards must be handled by group_or_alternate
+			panic!("got unexpected Discard when generating expression body");
 		},
 		Expr::Epsilon => Ok(quote! {
 			nbnf::nom::combinator::success(())
@@ -165,12 +171,19 @@ fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
 		"encountered invalid group/alternate with less than two elements"
 	);
 
+	let mut discards = HashSet::new();
 	let mut seq = quote! {};
-	for child in exprs {
+	for (index, child) in exprs.into_iter().enumerate() {
 		if !seq.is_empty() {
 			seq = quote! { #seq, };
 		}
-		let parser = expr_body(child)?;
+		let parser = if let Expr::Discard(child) = child {
+			ensure!(is_group, "found unexpected discard of alternate case");
+			discards.insert(index);
+			expr_body(child)?
+		} else {
+			expr_body(child)?
+		};
 		seq = quote! { #seq #parser };
 	}
 
@@ -181,6 +194,32 @@ fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
 			nbnf::nom::branch::alt((#seq))
 		};
 	}
+
+	let seq = if discards.is_empty() {
+		seq
+	} else {
+		let mut argument = quote!{};
+		let mut output = quote!{};
+		for index in 0 .. exprs.len() {
+			if !argument.is_empty() {
+				argument = quote! { #argument, };
+			}
+			if discards.contains(&index) {
+				argument = quote! { #argument _ };
+			} else {
+				if !output.is_empty() {
+					output = quote! { #output, };
+				}
+
+				let param = quote::format_ident!("p{index}");
+				argument = quote! { #argument #param };
+				output = quote! { #output #param };
+			}
+		}
+		quote! {
+			nbnf::nom::combinator::map(#seq, |(#argument)| (#output))
+		}
+	};
 
 	Ok(seq)
 }

@@ -33,6 +33,7 @@ pub enum Expr {
 	},
 	Not(Box<Expr>),
 	Recognize(Box<Expr>),
+	Discard(Box<Expr>),
 	Epsilon,
 	Map {
 		expr: Box<Expr>,
@@ -71,6 +72,18 @@ pub fn parse(tokens: Vec<Token>) -> AResult<Grammar> {
 enum Modifier {
 	Not,
 	Recognize,
+	Discard,
+}
+
+impl From<Token> for Modifier {
+	fn from(token: Token) -> Self {
+		match token {
+			Token::Not => Modifier::Not,
+			Token::Recognize => Modifier::Recognize,
+			Token::Discard => Modifier::Discard,
+			_ => panic!("no Modifier for {token:?}"),
+		}
+	}
 }
 
 struct Parser<Iter: Iterator>(Peekable<Iter>);
@@ -188,14 +201,9 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 						max,
 					})
 				},
-				Token::Not => {
-					self.pop().unwrap_or_else(|| unreachable!());
-					pending_modifiers.insert(Modifier::Not);
-					continue;
-				},
-				Token::Recognize => {
-					self.pop().unwrap_or_else(|| unreachable!());
-					pending_modifiers.insert(Modifier::Recognize);
+				Token::Not | Token::Recognize | Token::Discard => {
+					let token = self.pop().unwrap_or_else(|| unreachable!());
+					pending_modifiers.insert(token.into());
 					continue;
 				},
 				Token::Value | Token::Map | Token::MapOpt | Token::MapRes => {
@@ -275,6 +283,10 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			if pending_modifiers.contains(&Modifier::Recognize) {
 				expr = Expr::Recognize(expr.into());
 				pending_modifiers.remove(&Modifier::Recognize);
+			}
+			if pending_modifiers.contains(&Modifier::Discard) {
+				expr = Expr::Discard(expr.into());
+				pending_modifiers.remove(&Modifier::Discard);
 			}
 			assert!(pending_modifiers.is_empty(), "unimplemented modifiers: {pending_modifiers:?}");
 
