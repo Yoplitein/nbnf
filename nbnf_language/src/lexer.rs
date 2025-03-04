@@ -104,7 +104,8 @@ fn literal_range(input: &str) -> PResult<Token> {
 		verify(
 			alt((
 				map(escape_char, CharOrRange::Char),
-				map(anychar, CharOrRange::Char),
+				bracket_escape,
+				map(verify(anychar, |&char| char != ']'), CharOrRange::Char),
 			)),
 			|char| !matches!(char, CharOrRange::Char(']')),
 		)
@@ -175,6 +176,17 @@ fn test_literal_range() {
 			"",
 			Token::Literal(Literal::Range {
 				chars: vec!['['],
+				ranges: vec![],
+				invert: false,
+			})
+		)),
+	);
+	assert_eq!(
+		literal_range(r"[]]"),
+		Ok((
+			"]",
+			Token::Literal(Literal::Range {
+				chars: vec![],
 				ranges: vec![],
 				invert: false,
 			})
