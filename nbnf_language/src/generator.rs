@@ -54,10 +54,20 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 			group_or_alternate(matches!(body, Expr::Group(_)), exprs)
 		},
 		&Expr::Repeat { ref expr, min, max } => repeat(expr, min, max),
+		Expr::Discard(_) => {
+			// discards must be handled by group_or_alternate
+			panic!("got unexpected Discard when generating expression body");
+		},
 		Expr::Not(inner) => {
 			let inner = expr_body(inner)?;
 			Ok(quote! {
 				nbnf::nom::combinator::not(#inner)
+			})
+		},
+		Expr::Cut(inner) => {
+			let inner = expr_body(inner)?;
+			Ok(quote! {
+				nbnf::nom::combinator::cut(#inner)
 			})
 		},
 		Expr::Recognize(inner) => {
@@ -65,10 +75,6 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 			Ok(quote! {
 				nbnf::nom::combinator::recognize(#inner)
 			})
-		},
-		Expr::Discard(_) => {
-			// discards must be handled by group_or_alternate
-			panic!("got unexpected Discard when generating expression body");
 		},
 		Expr::Epsilon => Ok(quote! {
 			nbnf::nom::combinator::success(())

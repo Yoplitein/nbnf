@@ -24,9 +24,10 @@ pub enum Token {
 	Semicolon,
 	GroupOpen,
 	GroupClose,
-	Not,
-	Recognize,
 	Discard,
+	Not,
+	Cut,
+	Recognize,
 	Epsilon,
 	Value,
 	Map,
@@ -52,36 +53,41 @@ fn top(input: &str) -> PResult<Vec<Token>> {
 }
 
 fn token(input: &str) -> PResult<Token> {
-	alt((
-		map(path, Token::Rule),
-		map(literal, Token::Literal),
-		map(rustsrc, Token::RustSrc),
-		literal_range,
-		repeat,
-		value(
+	macro_rules! wrap {
+		($parser:expr) => {
+			|inp| $parser.parse(inp)
+		};
+	}
+	alt([
+		wrap!(map(path, Token::Rule)),
+		wrap!(map(literal, Token::Literal)),
+		wrap!(map(rustsrc, Token::RustSrc)),
+		wrap!(literal_range),
+		wrap!(repeat),
+		wrap!(value(
 			Token::Repeat {
 				min: 0,
 				max: Some(1),
 			},
 			tag("?"),
-		),
-		value(Token::Repeat { min: 0, max: None }, tag("*")),
-		value(Token::Repeat { min: 1, max: None }, tag("+")),
-		value(Token::Equals, tag("=")),
-		value(Token::Slash, tag("/")),
-		value(Token::Semicolon, tag(";")),
-		value(Token::GroupOpen, tag("(")),
-		value(Token::GroupClose, tag(")")),
-		value(Token::Not, tag("!")),
-		value(Token::Recognize, tag("~")),
-		value(Token::Discard, tag("-")),
-		value(Token::Epsilon, tag("&")),
-		value(Token::Value, tag("@")),
-		value(Token::MapOpt, tag("|?")),
-		value(Token::MapRes, tag("|!")),
-		value(Token::Map, tag("|")),
-	))
-	.parse(input)
+		)),
+		wrap!(value(Token::Repeat { min: 0, max: None }, tag("*"))),
+		wrap!(value(Token::Repeat { min: 1, max: None }, tag("+"))),
+		wrap!(value(Token::Equals, tag("="))),
+		wrap!(value(Token::Slash, tag("/"))),
+		wrap!(value(Token::Semicolon, tag(";"))),
+		wrap!(value(Token::GroupOpen, tag("("))),
+		wrap!(value(Token::GroupClose, tag(")"))),
+		wrap!(value(Token::Discard, tag("-"))),
+		wrap!(value(Token::Cut, tag("!!"))),
+		wrap!(value(Token::Not, tag("!"))),
+		wrap!(value(Token::Recognize, tag("~"))),
+		wrap!(value(Token::Epsilon, tag("&"))),
+		wrap!(value(Token::Value, tag("@"))),
+		wrap!(value(Token::MapOpt, tag("|?"))),
+		wrap!(value(Token::MapRes, tag("|!"))),
+		wrap!(value(Token::Map, tag("|"))),
+	]).parse(input)
 }
 
 fn literal_range(input: &str) -> PResult<Token> {
