@@ -138,13 +138,19 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			let body = self.parse_expr()?;
 			self.expect(Token::Semicolon)?;
 			ensure!(
-				rules.insert(rule_name.clone(), Rule { output_type, body }).is_none(),
+				rules
+					.insert(rule_name.clone(), Rule { output_type, body })
+					.is_none(),
 				"found duplicate rule {rule_name:?}"
 			);
 			rule_order.push(rule_name);
 		}
 		let top_rule = top_rule.unwrap();
-		Ok(Grammar { top_rule, rules, rule_order })
+		Ok(Grammar {
+			top_rule,
+			rules,
+			rule_order,
+		})
 	}
 
 	fn parse_expr(&mut self) -> AResult<Expr> {
@@ -240,7 +246,10 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			self.process_modifiers(&mut exprs, &mut pending_modifiers);
 		}
 
-		ensure!(pending_modifiers.is_empty(), "unprocessed modifiers: {pending_modifiers:?}");
+		ensure!(
+			pending_modifiers.is_empty(),
+			"unprocessed modifiers: {pending_modifiers:?}"
+		);
 		Ok(if !alts.is_empty() {
 			ensure!(
 				!exprs.is_empty(),
@@ -295,7 +304,10 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				expr = Expr::Discard(expr.into());
 				pending_modifiers.remove(&Modifier::Discard);
 			}
-			assert!(pending_modifiers.is_empty(), "unimplemented modifiers: {pending_modifiers:?}");
+			assert!(
+				pending_modifiers.is_empty(),
+				"unimplemented modifiers: {pending_modifiers:?}"
+			);
 
 			exprs.push(expr);
 		}

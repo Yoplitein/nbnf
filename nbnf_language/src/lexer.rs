@@ -87,7 +87,8 @@ fn token(input: &str) -> PResult<Token> {
 		wrap!(value(Token::MapOpt, tag("|?"))),
 		wrap!(value(Token::MapRes, tag("|!"))),
 		wrap!(value(Token::Map, tag("|"))),
-	]).parse(input)
+	])
+	.parse(input)
 }
 
 fn literal_range(input: &str) -> PResult<Token> {

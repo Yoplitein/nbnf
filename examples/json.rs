@@ -1,4 +1,5 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
+use std::str::FromStr;
 
 use nbnf_macro::nbnf;
 use nom::bytes::complete::take_while;
@@ -9,7 +10,6 @@ use nom::IResult;
 
 fn main() {
 	let input = r#"[1, 2.3, "four", {"five": false, "six": 7}, null, "abc \"def\" ghi\n"]"#;
-	// let input = r#"1.0"#;
 	_ = dbg!(json.parse(input));
 }
 

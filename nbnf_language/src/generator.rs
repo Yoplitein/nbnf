@@ -26,7 +26,10 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	};
 
 	for rule_name in &grammar.rule_order {
-		let rule = grammar.rules.get(rule_name).unwrap_or_else(|| unreachable!());
+		let rule = grammar
+			.rules
+			.get(rule_name)
+			.unwrap_or_else(|| unreachable!());
 		let parser = expr_body(&rule.body)?;
 		let rule_ident = raw_ident(rule_name);
 		let output_type: syn::Type = syn::parse_str(&rule.output_type)?;
@@ -203,8 +206,8 @@ fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
 	let seq = if discards.is_empty() {
 		seq
 	} else {
-		let mut argument = quote!{};
-		let mut output = quote!{};
+		let mut argument = quote! {};
+		let mut output = quote! {};
 		for index in 0 .. exprs.len() {
 			if !argument.is_empty() {
 				argument = quote! { #argument, };
