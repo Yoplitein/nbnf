@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::iter::Peekable;
 use std::mem::discriminant;
+use std::rc::Rc;
 
 use anyhow::{bail, ensure, Result as AResult};
 
@@ -8,8 +9,9 @@ use crate::{Literal, Token};
 
 #[derive(Clone, Debug)]
 pub struct Grammar {
-	pub top_rule: String,
-	pub rules: HashMap<String, Rule>,
+	pub top_rule: Rc<String>,
+	pub rules: HashMap<Rc<String>, Rule>,
+	pub rule_order: Vec<Rc<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -96,10 +98,12 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 	fn parse(&mut self) -> AResult<Grammar> {
 		let mut rules = HashMap::new();
 		let mut top_rule = None;
+		let mut rule_order = vec![];
 		while let Some(token) = self.pop() {
 			let Token::Rule(rule_name) = token else {
 				bail!("expected identifier to start rule definition but got {token:?}")
 			};
+			let rule_name = Rc::new(rule_name);
 			if top_rule.is_none() {
 				top_rule = Some(rule_name.clone());
 			}
@@ -117,10 +121,14 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			self.expect(Token::Equals)?;
 			let body = self.parse_expr()?;
 			self.expect(Token::Semicolon)?;
-			rules.insert(rule_name, Rule { output_type, body });
+			ensure!(
+				rules.insert(rule_name.clone(), Rule { output_type, body }).is_none(),
+				"found duplicate rule {rule_name:?}"
+			);
+			rule_order.push(rule_name);
 		}
 		let top_rule = top_rule.unwrap();
-		Ok(Grammar { top_rule, rules })
+		Ok(Grammar { top_rule, rules, rule_order })
 	}
 
 	fn parse_expr(&mut self) -> AResult<Expr> {

@@ -23,7 +23,8 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 		use nbnf::nom::Parser;
 	};
 
-	for (rule_name, rule) in &grammar.rules {
+	for rule_name in &grammar.rule_order {
+		let rule = grammar.rules.get(rule_name).unwrap_or_else(|| unreachable!());
 		let parser = expr_body(&rule.body)?;
 		let rule_ident = raw_ident(rule_name);
 		let output_type: syn::Type = syn::parse_str(&rule.output_type)?;
