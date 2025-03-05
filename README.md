@@ -1,5 +1,5 @@
 # nbnf
-A parser generator based on [nom](https://github.com/rust-bakery/nom/).
+A parser generator based on [nom](https://github.com/rust-bakery/nom/), with syntax inspired by EBNF and regex.
 
 ## Syntax overview
 A grammar is a series of rules containing expressions. Whitespace is ignored, rules must end with a semicolon:

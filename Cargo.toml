@@ -1,7 +1,13 @@
 [package]
 name = "nbnf"
-version = "0.1.0"
-edition = "2024"
+description = "A parser generator based on nom, with syntax inspired by EBNF and regex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+categories.workspace = true
+keywords.workspace = true
 
 [dependencies]
 nbnf_language = { workspace = true }
@@ -15,10 +21,19 @@ prettyplease = ["nbnf_language/prettyplease"]
 resolver = "2"
 members = [ "nbnf_language", "nbnf_macro" ]
 
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+authors = ["Steven Dwy <me@yoplitein.net>"]
+repository = "https://github.com/Yoplitein/nbnf"
+categories = ["parsing", "development-tools"]
+keywords = ["nom", "parser", "generator", "ebnf", "metalanguage"]
+
 [workspace.dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
-nbnf_language = { path = "./nbnf_language" }
-nbnf_macro = { path = "./nbnf_macro" }
+nbnf_language = { version = "0", path = "./nbnf_language" }
+nbnf_macro = { version = "0", path = "./nbnf_macro" }
 nom = "8"
 quote = "1"
 syn = { version = "2", features = ["full"] }
