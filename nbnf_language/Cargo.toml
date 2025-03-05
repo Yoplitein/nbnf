@@ -1,11 +1,13 @@
 [package]
 name = "nbnf_language"
 description = "A parser for the NBNF language itself, and the parser generator"
+readme = "../README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+documentation.workspace = true
 categories.workspace = true
 keywords.workspace = true
 

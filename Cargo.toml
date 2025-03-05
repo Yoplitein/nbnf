@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+documentation.workspace = true
 categories.workspace = true
 keywords.workspace = true
 
@@ -22,11 +23,12 @@ resolver = "2"
 members = [ "nbnf_language", "nbnf_macro" ]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 license = "MIT"
 authors = ["Steven Dwy <me@yoplitein.net>"]
 repository = "https://github.com/Yoplitein/nbnf"
+documentation = "https://docs.rs/nbnf"
 categories = ["parsing", "development-tools"]
 keywords = ["nom", "parser", "generator", "ebnf", "metalanguage"]
 

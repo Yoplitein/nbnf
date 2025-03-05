@@ -1,11 +1,13 @@
 [package]
 name = "nbnf_macro"
 description = "nbnf's proc macro enabling ergonomic parser generation"
+readme = "../README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+documentation.workspace = true
 categories.workspace = true
 keywords.workspace = true
 
