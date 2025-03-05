@@ -1,40 +1,65 @@
 use std::collections::HashSet;
 use std::ops::RangeInclusive;
 
-use anyhow::{bail, ensure, Result as AResult};
+use anyhow::{Result as AResult, bail, ensure};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while, take_while1};
 use nom::character::complete::{anychar, char, usize};
 use nom::combinator::{complete, cut, eof, map, map_opt, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
-use nom::multi::{fold_many1, fold_many_m_n, many0, separated_list0, separated_list1};
+use nom::multi::{fold_many_m_n, fold_many1, many0, separated_list0, separated_list1};
 use nom::{Finish, Offset, Parser};
 use nom_language::error::VerboseError;
 
 use crate::Literal;
 
+/// A parsed token.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
+	/// A rule name.
 	Rule(String),
+	/// A literal value.
 	Literal(Literal),
-	Repeat { min: usize, max: Option<usize> },
+	/// A repeat modifier.
+	Repeat {
+		/// The minimum number of times to repeat.
+		min: usize,
+		/// The maximum number of times to repeat, if any.
+		max: Option<usize>,
+	},
+	/// Rust source code.
 	RustSrc(String),
+	/// A `=` token.
 	Equals,
+	/// A `/` token.
 	Slash,
+	/// A `;` token.
 	Semicolon,
+	/// A `(` token.
 	GroupOpen,
+	/// A `)` token.
 	GroupClose,
+	/// A `-` token.
 	Discard,
+	/// A `!` token.
 	Not,
+	/// A `!!` token.
 	Cut,
+	/// A `~` token.
 	Recognize,
+	/// A `&` token.
 	Epsilon,
+	/// A `@` token.
 	Value,
+	/// A `|` token.
 	Map,
+	/// A `|?` token.
 	MapOpt,
+	/// A `|!` token.
 	MapRes,
 }
 
+/// Parse a grammar into a list of tokens.
 pub fn lex(input: &str) -> anyhow::Result<Vec<Token>> {
 	let res = complete(top).parse(input).finish();
 	let res = res.map_err(|err| anyhow::anyhow!("{err:#?}"));
@@ -331,7 +356,9 @@ fn test_literal_range() {
 		Ok((
 			"",
 			Token::Literal(Literal::Range {
-				chars: HashSet::from_iter(['\n', '\r', '\t', '\0', '\\', '\x7F', '\u{BEEF}']),
+				chars: HashSet::from_iter([
+					'\n', '\r', '\t', '\0', '\\', '\x7F', '\u{BEEF}'
+				]),
 				ranges: HashSet::new(),
 				invert: false,
 			})

@@ -2,6 +2,16 @@ use std::fmt::Write;
 
 use quote::quote;
 
+/**
+	Expands to Rust code implementing the given grammar passed as a string literal.
+
+	Examples:
+	```
+	nbnf!(r#"
+		top = ~('a' top 'b') / ~&;
+	"#);
+	```
+*/
 #[proc_macro]
 pub fn nbnf(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let str: syn::LitStr = match syn::parse(tokens) {
@@ -10,15 +20,15 @@ pub fn nbnf(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 			return compile_error(
 				None,
 				&format!("grammar must be given as a string ({err:?})"),
-			)
+			);
 		},
 	};
 	let str = str.value();
-	let tokens = match nbnf_language::lexer::lex(&str) {
+	let tokens = match nbnf_language::lex(&str) {
 		Ok(t) => t,
 		Err(err) => return compile_error(Some(err), "couldn't lex given grammar"),
 	};
-	let grammar = match nbnf_language::parser::parse(tokens) {
+	let grammar = match nbnf_language::parse(tokens) {
 		Ok(g) => g,
 		Err(err) => return compile_error(Some(err), "couldn't parse given grammar"),
 	};

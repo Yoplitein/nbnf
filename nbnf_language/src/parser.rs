@@ -3,51 +3,129 @@ use std::iter::Peekable;
 use std::mem::discriminant;
 use std::rc::Rc;
 
-use anyhow::{bail, ensure, Result as AResult};
+use anyhow::{Result as AResult, bail, ensure};
 
 use crate::{Literal, Token};
 
+/// A parsed grammar.
 #[derive(Clone, Debug)]
 pub struct Grammar {
+	/**
+		The topmost (first) rule in the grammar.
+
+		Conventionally, this is the root rule acting as the grammar's entrypoint.
+	*/
 	pub top_rule: Rc<String>,
+
+	/// The rules in this grammar.
 	pub rules: HashMap<Rc<String>, Rule>,
+
+	/**
+		Rule names in the order as defined in the grammar.
+
+		This is used by the generator to emit parser functions in the same order as their defining rules.
+	*/
 	pub rule_order: Vec<Rc<String>>,
 }
 
+/// A rule.
 #[derive(Clone, Debug)]
 pub struct Rule {
+	/// A string of Rust source denoting the type of this rule's output.
 	pub output_type: String,
+	/// The root expression of this rule.
 	pub body: Expr,
 }
 
+/// A grammar expression.
 #[derive(Clone, Debug)]
 pub enum Expr {
+	/// Match a literal.
 	Literal(Literal),
+	/// Match some other parser.
 	Rule(String),
+	/// Match a group of expressions.
 	Group(Vec<Expr>),
+	/**
+		Match one of a group of expressions.
+
+		Wraps the inner expression with [alt][nom::branch::alt].
+	*/
 	Alternate(Vec<Expr>),
+	/**
+		Match an expression repeatedly.
+
+		Wraps the inner expression with one of [many0][nom::multi::many0], [many1][nom::multi::many1], [many_m_n][nom::multi::many_m_n].
+	*/
 	Repeat {
+		/// The inner expression to match.
 		expr: Box<Expr>,
+		/// The minimum number of times to repeat.
 		min: usize,
+		/// The maximum number of times to repeat, if any.
 		max: Option<usize>,
 	},
+	/**
+		Match an expression but discard its output from the parent expression's output.
+
+		Wraps the inner expression with a generated map function like
+		```
+		map(
+			inner,
+			|(_, p1, _, p2)| (p1, p2),
+		)
+		```
+	*/
 	Discard(Box<Expr>),
+	/**
+		Match only if the inner expression does not.
+
+		Wraps the inner expression with [not][nom::combinator::not].
+	*/
 	Not(Box<Expr>),
+	/**
+		Match an expression that should fail irrecoverably, preventing backtracking.
+
+		Wraps the inner expression with [cut][nom::combinator::cut].
+	*/
 	Cut(Box<Expr>),
+	/**
+		Match an expression but replace its output with the string of input it matched.
+
+		Wraps the inner expression with [recognize][nom::combinator::recognize].
+	*/
 	Recognize(Box<Expr>),
+	/**
+		Match the empty string.
+
+		A shortcut for [success][nom::combinator::success].
+	*/
 	Epsilon,
+	/**
+		Apply a mapping function.
+
+		Wraps the inner expression with one of [value][nom::combinator::value], [map][nom::combinator::map], [map_opt][nom::combinator::map_opt], [map_res][nom::combinator::map_res].
+	*/
 	Map {
+		/// The inner expression to match.
 		expr: Box<Expr>,
+		/// The type of mapping function to apply.
 		func: MapFunc,
+		/// The code to apply as the mapping function.
 		mapping_code: String,
 	},
 }
 
+/// Mapping function applied by [Map][Expr::Map].
 #[derive(Clone, Debug)]
 pub enum MapFunc {
+	/// Applies [value](nom::combinator::value).
 	Value,
+	/// Applies [map](nom::combinator::map).
 	Map,
+	/// Applies [map_opt](nom::combinator::map_opt).
 	MapOpt,
+	/// Applies [map_res](nom::combinator::map_res).
 	MapRes,
 }
 
@@ -63,6 +141,7 @@ impl From<Token> for MapFunc {
 	}
 }
 
+/// Parse a list of tokens into a grammar.
 pub fn parse(tokens: Vec<Token>) -> AResult<Grammar> {
 	ensure!(!tokens.is_empty());
 	let mut parser = Parser(tokens.into_iter().peekable());

@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use nbnf::nbnf;
+use nbnf::nom::IResult;
 use nbnf::nom::bytes::complete::take_while;
 use nbnf::nom::bytes::tag;
 use nbnf::nom::combinator::value;
 use nbnf::nom::multi::separated_list0;
-use nbnf::nom::IResult;
 
 fn main() {
 	let input = r#"[1, 2.3, "four", {"five": false, "six": 7}, null, "abc \"def\" ghi\n"]"#;

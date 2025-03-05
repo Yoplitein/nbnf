@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use anyhow::{ensure, Context, Result as AResult};
+use anyhow::{Context, Result as AResult, ensure};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::Path;
@@ -8,6 +8,11 @@ use syn::Path;
 use crate::parser::MapFunc;
 use crate::{Expr, Grammar, Literal};
 
+/**
+	Generate a [String] of Rust source implememting parsers for the given grammar.
+
+	If the `prettyplease` feature is enabled, the returned code will be pretty-printed.
+*/
 pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	let module = generate_parser_tokens(grammar)?;
 	#[cfg(feature = "prettyplease")]
@@ -20,6 +25,9 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	Ok(res)
 }
 
+/**
+	Generate a `TokenStream` with implementations for the given grammar.
+*/
 pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
 		use nbnf::nom::Parser;
