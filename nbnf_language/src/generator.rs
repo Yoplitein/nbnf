@@ -128,53 +128,33 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 			ref ranges,
 			invert,
 		} => {
-			let mut conditions = vec![];
-			let op = if invert {
-				quote! { != }
-			} else {
-				quote! { == }
-			};
+			let mut patterns = vec![];
 			for char in chars {
-				conditions.push(quote! {
-					char #op #char
-				});
+				patterns.push(quote! { #char });
 			}
-			let op = if invert {
+			for range in ranges {
+				let start = range.start();
+				let end = range.end();
+				patterns.push(quote! { #start ..= #end });
+			}
+			let patterns = patterns
+				.into_iter()
+				.reduce(|left, right| quote! {
+					#left | #right
+				});
+
+			let invert = if invert {
 				quote! { ! }
 			} else {
 				quote! {}
 			};
-			for range in ranges {
-				let start = range.start();
-				let end = range.end();
-				conditions.push(quote! {
-					#op(#start ..= #end).contains(&char)
-				});
-			}
-			let conditions = conditions
-				.into_iter()
-				.reduce(|l, r| {
-					if invert {
-						quote! {
-							#l && #r
-						}
-					} else {
-						quote! {
-							#l || #r
-						}
-					}
-				})
-				.unwrap_or_else(|| {
-					quote! {
-						// empty range matches exactly one character
-						true
-					}
-				});
-
 			quote! {
 				nbnf::nom::combinator::verify(
 					nbnf::nom::character::complete::anychar,
-					|&char: &char| #conditions
+					|&char: &char| #invert match char {
+						#patterns => true,
+						_ => false,
+					}
 				)
 			}
 		},
