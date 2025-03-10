@@ -6,7 +6,7 @@ use quote::quote;
 use syn::Path;
 
 use crate::parser::MapFunc;
-use crate::{Expr, Grammar, Literal};
+use crate::{Expr, GLiteral, Grammar, Literal};
 
 /**
 	Generate a [String] of Rust source implememting parsers for the given grammar.
@@ -117,17 +117,17 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 
 fn literal(literal: &Literal) -> AResult<TokenStream> {
 	Ok(match literal {
-		Literal::Char(char) => quote! {
+		Literal::Char(GLiteral::Char(char)) => quote! {
 			nbnf::nom::character::complete::char(#char)
 		},
-		Literal::String(str) => quote! {
+		Literal::Char(GLiteral::String(str)) => quote! {
 			nbnf::nom::bytes::complete::tag(#str)
 		},
-		&Literal::Range {
+		&Literal::Char(GLiteral::Range {
 			ref chars,
 			ref ranges,
 			invert,
-		} => {
+		}) => {
 			let mut patterns = vec![];
 			for char in chars {
 				patterns.push(quote! { #char });
@@ -158,6 +158,7 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 				)
 			}
 		},
+		_ => todo!(),
 	})
 }
 
