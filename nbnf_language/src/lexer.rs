@@ -69,6 +69,16 @@ pub fn lex(input: &str) -> anyhow::Result<Vec<Token>> {
 
 type PResult<'a, T> = nom::IResult<&'a str, T, VerboseError<&'a str>>;
 
+macro_rules! nom_bail {
+	($input:expr, $err:expr) => {
+		return Err(nom::Err::Failure(VerboseError::from_external_error(
+			$input,
+			ErrorKind::Fail,
+			$err,
+		)))
+	};
+}
+
 fn top(input: &str) -> PResult<Vec<Token>> {
 	let (input, _) = whitespace.parse(input)?;
 	let (input, tokens) = separated_list0(whitespace, token).parse(input)?;
@@ -84,8 +94,8 @@ fn token(input: &str) -> PResult<Token> {
 		};
 	}
 	alt([
-		wrap!(map(path, Token::Rule)),
 		wrap!(map(literal, Token::Literal)),
+		wrap!(map(path, Token::Rule)),
 		wrap!(map(rustsrc, Token::RustSrc)),
 		wrap!(literal_range),
 		wrap!(repeat),
@@ -138,8 +148,8 @@ fn literal_range(input: &str) -> PResult<Token> {
 	fn char(input: &str) -> PResult<CharOrRange> {
 		verify(
 			alt((
-				map(escape_char, CharOrRange::Char),
 				bracket_escape,
+				map(escape_char(false), CharOrRange::Char),
 				map(verify(anychar, |&char| char != ']'), CharOrRange::Char),
 			)),
 			|char| !matches!(char, CharOrRange::Char(']')),
@@ -690,10 +700,12 @@ fn identifier(input: &str) -> PResult<&str> {
 }
 
 fn literal(input: &str) -> PResult<Literal> {
+	let (input, is_byte_literal) = map(opt(tag("b")), |x| x.is_some()).parse(input)?;
+	
 	let input_start = input;
 	let (input, quote_char) = alt((char('\''), char('"'))).parse(input)?;
 	let (input, body) = fold_many1(
-		alt((escape_char, verify(anychar, |&char| char != quote_char))),
+		alt((escape_char(is_byte_literal), verify(anychar, |&char| char != quote_char))),
 		String::new,
 		|mut str, char| {
 			str.push(char);
@@ -707,41 +719,91 @@ fn literal(input: &str) -> PResult<Literal> {
 		'\'' => {
 			let mut chars = body.chars();
 			let Some(char) = chars.next() else {
-				return Err(nom::Err::Failure(VerboseError::from_external_error(
-					input_start,
-					ErrorKind::Alpha,
-					"empty char literal",
-				)));
+				nom_bail!(input_start, "empty char literal");
 			};
 			let None = chars.next() else {
-				// TODO: replace escapes
-				return Err(nom::Err::Failure(VerboseError::from_external_error(
-					input_start,
-					ErrorKind::Alpha,
-					"char literal with more than one character",
-				)));
+				nom_bail!(input_start, "char literal with more than one character");
 			};
 			GLiteral::Char(char)
 		},
 		'"' => GLiteral::String(body.to_string()),
 		_ => unreachable!(),
 	};
-	Ok((input, literal.into()))
+	let literal = if !is_byte_literal {
+		Literal::Char(literal)
+	} else {
+		fn coerce_char(char: char) -> Result<u8, std::num::TryFromIntError> {
+			u8::try_from(char as u32)
+		}
+		
+		let literal = match literal {
+			GLiteral::Char(c) => coerce_char(c).map(GLiteral::Char),
+			GLiteral::String(cs) => {
+				cs
+					.chars()
+					.map(coerce_char)
+					.collect::<Result<Vec<u8>, std::num::TryFromIntError>>()
+					.map(GLiteral::String)
+			},
+			_ => unreachable!(),
+		};
+		let literal = match literal {
+			Ok(l) => l,
+			Err(err) => nom_bail!(input, err),
+		};
+		Literal::Byte(literal)
+	};
+	Ok((input, literal))
 }
 
-fn escape_char(input: &str) -> PResult<char> {
-	alt((
-		value('\'', tag(r#"\'"#)),
-		value('"', tag(r#"\""#)),
-		value('\\', tag(r#"\\"#)),
-		value('\n', tag(r#"\n"#)),
-		value('\r', tag(r#"\r"#)),
-		value('\t', tag(r#"\t"#)),
-		value('\0', tag(r#"\0"#)),
-		hex_escape,
-		unicode_escape,
-	))
-	.parse(input)
+fn escape_char(is_byte_literal: bool) -> impl FnMut(&str) -> PResult<char> {
+	fn shared_escapes(input: &str) -> PResult<char> {
+		alt((
+			value('\'', tag(r#"\'"#)),
+			value('"', tag(r#"\""#)),
+			value('\\', tag(r#"\\"#)),
+			value('\n', tag(r#"\n"#)),
+			value('\r', tag(r#"\r"#)),
+			value('\t', tag(r#"\t"#)),
+			value('\0', tag(r#"\0"#)),
+		))
+		.parse(input)
+	}
+	
+	fn fail_on_unknown(input: &str) -> PResult<char> {
+		let input_start = input;
+		let (input, _) = tag("\\").parse(input)?;
+		let (_, char) = match anychar::<&str, VerboseError<&str>>.parse(input) {
+			Ok(c) => c,
+			Err(_) => nom_bail!(input_start, "found literal with no end quote and unfinished escape"),
+		};
+		nom_bail!(input_start, format!("unknown escape sequence `\\{char}`"));
+	}
+	
+	fn char_escapes(input: &str) -> PResult<char> {
+		alt((
+			shared_escapes,
+			hex_escape(false),
+			unicode_escape,
+			fail_on_unknown,
+		))
+		.parse(input)
+	}
+	
+	fn byte_escapes(input: &str) -> PResult<char> {
+		alt((
+			shared_escapes,
+			hex_escape(true),
+			fail_on_unknown,
+		))
+		.parse(input)
+	}
+	
+	if is_byte_literal {
+		byte_escapes
+	} else {
+		char_escapes
+	}
 }
 
 fn hex_char(input: &str) -> PResult<char> {
@@ -754,21 +816,28 @@ fn hex_digits(min: usize, max: usize) -> impl FnMut(&str) -> PResult<&str> {
 	}
 }
 
-fn hex_escape(input: &str) -> PResult<char> {
-	let (input, _) = tag(r#"\x"#).parse(input)?;
-	let (input, char) = cut(map_res(hex_digits(2, 2), |str| -> AResult<char> {
-		let val = u32::from_str_radix(str, 16)?;
-		ensure!(
-			val < 0x80,
-			"ASCII escapes must be in the range 0x00 ..= 0x7F"
-		);
-		let Some(char) = char::from_u32(val) else {
-			unreachable!()
-		};
-		Ok(char)
-	}))
-	.parse(input)?;
-	Ok((input, char))
+fn hex_escape(is_byte_literal: bool) -> impl FnMut(&str) -> PResult<char> {
+	let max_value = if is_byte_literal {
+		0xFF
+	} else {
+		0x7F
+	};
+	move |input: &str| -> PResult<char> {
+		let (input, _) = tag(r#"\x"#).parse(input)?;
+		let (input, char) = cut(map_res(hex_digits(2, 2), |str| -> AResult<char> {
+			let val = u32::from_str_radix(str, 16)?;
+			ensure!(
+				val <= max_value,
+				"hex escapes must be in the range 0x00 ..= 0x{max_value:02X}"
+			);
+			let Some(char) = char::from_u32(val) else {
+				unreachable!()
+			};
+			Ok(char)
+		}))
+		.parse(input)?;
+		Ok((input, char))
+	}
 }
 
 fn unicode_escape(input: &str) -> PResult<char> {
@@ -791,10 +860,18 @@ fn test_literal() {
 		literal(r#"'a'"#),
 		Ok(("", Literal::Char(GLiteral::Char('a')))),
 	);
+	assert_eq!(
+		literal(r#"b'a'"#),
+		Ok(("", Literal::Byte(GLiteral::Char(b'a')))),
+	);
 	assert!(matches!(literal(r#"''"#), Err(_),));
 	assert_eq!(
 		literal(r#""a""#),
 		Ok(("", Literal::Char(GLiteral::String("a".into())))),
+	);
+	assert_eq!(
+		literal(r#"b"a""#),
+		Ok(("", Literal::Byte(GLiteral::String(b"a".into())))),
 	);
 	assert_eq!(
 		literal(r#""ab""#),
@@ -827,6 +904,12 @@ fn test_literal() {
 	assert!(matches!(literal(r#""\x80""#), Err(_),));
 	assert!(matches!(literal(r#""\u{}""#), Err(_),));
 	assert!(matches!(literal(r#""\u{1234567}""#), Err(_),));
+	assert_eq!(
+		literal(r#"b"\x80\xFF""#),
+		Ok(("", Literal::Byte(GLiteral::String(b"\x80\xFF".into())))),
+	);
+	_ = dbg!(literal(r#"b"\u{61}""#));
+	assert!(matches!(literal(r#"b"\u{61}""#), Err(_),));
 }
 
 fn whitespace(input: &str) -> PResult<()> {
