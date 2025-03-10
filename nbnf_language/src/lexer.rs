@@ -178,6 +178,7 @@ fn literal_range(input: &str) -> PResult<Token> {
 			CharOrRange::Range(range) => _ = ranges.insert(range),
 		}
 	}
+	merge_ranges(&mut chars, &mut ranges);
 
 	let (input, _) = tag("]").parse(input)?;
 	let (input, _) = whitespace.parse(input)?;
@@ -190,6 +191,105 @@ fn literal_range(input: &str) -> PResult<Token> {
 			invert,
 		}),
 	))
+}
+
+fn merge_ranges(chars: &mut HashSet<char>, ranges: &mut HashSet<RangeInclusive<char>>) {
+	ranges.retain(|range| {
+		if range.start() == range.end() {
+			chars.insert(*range.start());
+			false
+		} else {
+			true
+		}
+	});
+	chars.retain(|char| {
+		if ranges.iter().any(|range| range.contains(char)) {
+			false
+		} else {
+			true
+		}
+	});
+
+	if ranges.is_empty() {
+		return;
+	}
+
+	let mut ranges_copy = vec![];
+	let mut last_len = usize::MAX;
+	'outer: loop {
+		if ranges.len() >= last_len {
+			panic!("merge_ranges stuck in infinite loop");
+		}
+		last_len = ranges.len();
+
+		ranges_copy.clear();
+		ranges_copy.extend(ranges.iter().cloned());
+		for (left_index, left) in ranges_copy.iter().enumerate() {
+			for (right_index, right) in ranges_copy.iter().enumerate() {
+				if left_index == right_index {
+					continue;
+				}
+				if left.start() <= right.start() && right.start() <= left.end() {
+					let range = *left.start().min(right.start()) ..= *left.end().max(right.end());
+					eprintln!("merge {left:?}/{right:?} => {range:?}");
+					ranges.remove(left);
+					ranges.remove(right);
+					ranges.insert(range);
+					continue 'outer;
+				}
+			}
+		}
+		break;
+	}
+}
+
+#[test]
+fn test_merge_ranges() {
+	// remove chars covered by a range
+	let mut chars = HashSet::from_iter(['a', 'b']);
+	let mut ranges = HashSet::from_iter(['b' ..= 'c']);
+	merge_ranges(&mut chars, &mut ranges);
+	assert_eq!(
+		(chars, ranges),
+		(
+			HashSet::from_iter(['a']),
+			HashSet::from_iter(['b' ..= 'c']),
+		)
+	);
+
+	// unit ranges moved to chars
+	chars = HashSet::from_iter(['b']);
+	ranges = HashSet::from_iter(['a' ..= 'a']);
+	merge_ranges(&mut chars, &mut ranges);
+	assert_eq!(
+		(chars, ranges),
+		(
+			HashSet::from_iter(['a', 'b']),
+			HashSet::from_iter([]),
+		)
+	);
+
+	// merge overlapping ranges
+	chars = HashSet::from_iter(['a']);
+	ranges = HashSet::from_iter(['b' ..= 'd', 'c' ..= 'f', '0' ..= '5', '2' ..= '4']);
+	merge_ranges(&mut chars, &mut ranges);
+	assert_eq!(
+		(chars, ranges),
+		(
+			HashSet::from_iter(['a']),
+			HashSet::from_iter(['b' ..= 'f', '0' ..= '5']),
+		)
+	);
+	chars = HashSet::from_iter(['a', 'b', 'c']);
+	ranges = HashSet::from_iter(['d' ..= 'f', 'g' ..= 'i', 'b' ..= 'l']);
+	merge_ranges(&mut chars, &mut ranges);
+	assert_eq!(
+		(chars, ranges),
+		(
+			HashSet::from_iter(['a']),
+			HashSet::from_iter(['b' ..= 'l']),
+		)
+	);
 }
 
 #[test]
