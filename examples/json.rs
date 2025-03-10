@@ -39,7 +39,7 @@ nbnf!(r#"
 		string|<Json::String> /
 		array /
 		object /
-		nom::combinator::eof@<Json::Null>;
+		nbnf::nom::combinator::eof@<Json::Null>;
 
 	null<Json> = "null"@<Json::Null>;
 	boolean<Json> =
