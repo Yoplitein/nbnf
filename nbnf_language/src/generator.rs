@@ -40,11 +40,12 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 			.unwrap_or_else(|| unreachable!());
 		let parser = expr_body(&rule.body)?;
 		let rule_ident = raw_ident(rule_name);
+		let input_type: syn::Type = syn::parse_str(&rule.input_type)?;
 		let output_type: syn::Type = syn::parse_str(&rule.output_type)?;
 		module = quote! {
 			#module
 
-			fn #rule_ident(input: &str) -> nbnf::nom::IResult<&str, #output_type> {
+			fn #rule_ident(input: #input_type) -> nbnf::nom::IResult<#input_type, #output_type> {
 				#parser.parse(input)
 			}
 		};
