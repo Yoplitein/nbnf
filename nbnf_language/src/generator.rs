@@ -137,11 +137,11 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 				let end = range.end();
 				patterns.push(quote! { #start ..= #end });
 			}
-			let patterns = patterns
-				.into_iter()
-				.reduce(|left, right| quote! {
+			let patterns = patterns.into_iter().reduce(|left, right| {
+				quote! {
 					#left | #right
-				});
+				}
+			});
 
 			let invert = if invert {
 				quote! { ! }

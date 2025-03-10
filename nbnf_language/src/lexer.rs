@@ -185,11 +185,14 @@ fn literal_range(input: &str) -> PResult<Token> {
 
 	Ok((
 		input,
-		Token::Literal(GLiteral::Range {
-			chars,
-			ranges,
-			invert,
-		}.into()),
+		Token::Literal(
+			GLiteral::Range {
+				chars,
+				ranges,
+				invert,
+			}
+			.into(),
+		),
 	))
 }
 
@@ -251,10 +254,7 @@ fn test_merge_ranges() {
 	merge_ranges(&mut chars, &mut ranges);
 	assert_eq!(
 		(chars, ranges),
-		(
-			HashSet::from_iter(['a']),
-			HashSet::from_iter(['b' ..= 'c']),
-		)
+		(HashSet::from_iter(['a']), HashSet::from_iter(['b' ..= 'c']),)
 	);
 
 	// unit ranges moved to chars
@@ -263,32 +263,38 @@ fn test_merge_ranges() {
 	merge_ranges(&mut chars, &mut ranges);
 	assert_eq!(
 		(chars, ranges),
-		(
-			HashSet::from_iter(['a', 'b']),
-			HashSet::from_iter([]),
-		)
+		(HashSet::from_iter(['a', 'b']), HashSet::from_iter([]),)
 	);
 
 	// merge overlapping ranges
 	chars = HashSet::from_iter(['a']);
-	ranges = HashSet::from_iter(['b' ..= 'd', 'c' ..= 'f', '0' ..= '5', '2' ..= '4']);
+	ranges = HashSet::from_iter([
+		'b' ..= 'd',
+		'c' ..= 'f',
+		'0' ..= '5',
+		'2' ..= '4',
+	]);
 	merge_ranges(&mut chars, &mut ranges);
 	assert_eq!(
 		(chars, ranges),
 		(
 			HashSet::from_iter(['a']),
-			HashSet::from_iter(['b' ..= 'f', '0' ..= '5']),
+			HashSet::from_iter([
+				'b' ..= 'f',
+				'0' ..= '5'
+			]),
 		)
 	);
 	chars = HashSet::from_iter(['a', 'b', 'c']);
-	ranges = HashSet::from_iter(['d' ..= 'f', 'g' ..= 'i', 'b' ..= 'l']);
+	ranges = HashSet::from_iter([
+		'd' ..= 'f',
+		'g' ..= 'i',
+		'b' ..= 'l',
+	]);
 	merge_ranges(&mut chars, &mut ranges);
 	assert_eq!(
 		(chars, ranges),
-		(
-			HashSet::from_iter(['a']),
-			HashSet::from_iter(['b' ..= 'l']),
-		)
+		(HashSet::from_iter(['a']), HashSet::from_iter(['b' ..= 'l']),)
 	);
 }
 
@@ -309,11 +315,14 @@ fn test_literal_range() {
 		literal_range(r"[[]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['[']),
-				ranges: HashSet::new(),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['[']),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
@@ -331,148 +340,187 @@ fn test_literal_range() {
 		literal_range(r"[\]]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter([']']),
-				ranges: HashSet::new(),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter([']']),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[a]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a']),
-				ranges: HashSet::new(),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a']),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[aa]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a']),
-				ranges: HashSet::new(),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a']),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[ab]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a', 'b']),
-				ranges: HashSet::new(),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a', 'b']),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[^a]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a']),
-				ranges: HashSet::new(),
-				invert: true,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a']),
+					ranges: HashSet::new(),
+					invert: true,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[a^]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a', '^']),
-				ranges: HashSet::new(),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a', '^']),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[^a]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a']),
-				ranges: HashSet::new(),
-				invert: true,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a']),
+					ranges: HashSet::new(),
+					invert: true,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[^]"),
 		Ok((
 			"",
-			Token::Literal(Literal::Char(GLiteral::Range {
-				chars: HashSet::new(),
-				ranges: HashSet::new(),
-				invert: true,
-			}.into()))
+			Token::Literal(Literal::Char(
+				GLiteral::Range {
+					chars: HashSet::new(),
+					ranges: HashSet::new(),
+					invert: true,
+				}
+				.into()
+			))
 		)),
 	);
 	assert_eq!(
 		literal_range("[ab-c]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a']),
-				ranges: HashSet::from_iter(['b' ..= 'c']),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a']),
+					ranges: HashSet::from_iter(['b' ..= 'c']),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[ab-cd]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a', 'd']),
-				ranges: HashSet::from_iter(['b' ..= 'c']),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a', 'd']),
+					ranges: HashSet::from_iter(['b' ..= 'c']),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range("[ab-cde-f]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter(['a', 'd']),
-				ranges: HashSet::from_iter([
-					'b' ..= 'c',
-					'e' ..= 'f'
-				]),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['a', 'd']),
+					ranges: HashSet::from_iter([
+						'b' ..= 'c',
+						'e' ..= 'f'
+					]),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range(r#"[\n\r\t\0\\\x7F\u{beEF}]"#),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter([
-					'\n', '\r', '\t', '\0', '\\', '\x7F', '\u{BEEF}'
-				]),
-				ranges: HashSet::new(),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter([
+						'\n', '\r', '\t', '\0', '\\', '\x7F', '\u{BEEF}'
+					]),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
 		literal_range(r#"[\u{1010}-\u{2020}]"#),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::new(),
-				ranges: HashSet::from_iter(['\u{1010}' ..= '\u{2020}']),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::new(),
+					ranges: HashSet::from_iter(['\u{1010}' ..= '\u{2020}']),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 	assert_eq!(
@@ -490,11 +538,14 @@ fn test_literal_range() {
 		literal_range("[ ]"),
 		Ok((
 			"",
-			Token::Literal(GLiteral::Range {
-				chars: HashSet::from_iter([' ']),
-				ranges: HashSet::new(),
-				invert: false,
-			}.into())
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter([' ']),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
 		)),
 	);
 }
@@ -736,13 +787,28 @@ fn unicode_escape(input: &str) -> PResult<char> {
 
 #[test]
 fn test_literal() {
-	assert_eq!(literal(r#"'a'"#), Ok(("", Literal::Char(GLiteral::Char('a')))),);
+	assert_eq!(
+		literal(r#"'a'"#),
+		Ok(("", Literal::Char(GLiteral::Char('a')))),
+	);
 	assert!(matches!(literal(r#"''"#), Err(_),));
-	assert_eq!(literal(r#""a""#), Ok(("", Literal::Char(GLiteral::String("a".into())))),);
-	assert_eq!(literal(r#""ab""#), Ok(("", Literal::Char(GLiteral::String("ab".into())))),);
+	assert_eq!(
+		literal(r#""a""#),
+		Ok(("", Literal::Char(GLiteral::String("a".into())))),
+	);
+	assert_eq!(
+		literal(r#""ab""#),
+		Ok(("", Literal::Char(GLiteral::String("ab".into())))),
+	);
 	assert!(matches!(literal(r#""""#), Err(_),));
-	assert_eq!(literal(r#"'\''"#), Ok(("", Literal::Char(GLiteral::Char('\'')))),);
-	assert_eq!(literal(r#"'\n'"#), Ok(("", Literal::Char(GLiteral::Char('\n')))),);
+	assert_eq!(
+		literal(r#"'\''"#),
+		Ok(("", Literal::Char(GLiteral::Char('\'')))),
+	);
+	assert_eq!(
+		literal(r#"'\n'"#),
+		Ok(("", Literal::Char(GLiteral::Char('\n')))),
+	);
 	assert_eq!(
 		literal(r#""a\"b""#),
 		Ok(("", Literal::Char(GLiteral::String("a\"b".into())))),
@@ -753,7 +819,10 @@ fn test_literal() {
 	);
 	assert_eq!(
 		literal(r#""\n\r\t\0\x7f\x7F\u{beEF}""#),
-		Ok(("", Literal::Char(GLiteral::String("\n\r\t\0\x7F\x7F\u{BEEF}".into())))),
+		Ok((
+			"",
+			Literal::Char(GLiteral::String("\n\r\t\0\x7F\x7F\u{BEEF}".into()))
+		)),
 	);
 	assert!(matches!(literal(r#""\x80""#), Err(_),));
 	assert!(matches!(literal(r#""\u{}""#), Err(_),));
