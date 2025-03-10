@@ -159,7 +159,31 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 				)
 			}
 		},
-		_ => todo!(),
+		Literal::Byte(GLiteral::Char(byte)) => {
+			// nom doesn't seem to have a byte equivalent of `char(_)`
+			quote! {
+				nbnf::nom::combinator::map_res(
+					nbnf::nom::bytes::complete::take(1usize),
+					|bytes: &[u8]| {
+						let expected_byte = #byte;
+						assert!(bytes.len() == 1, "take(1usize) unexpectedly returned {} bytes", bytes.len());
+						let byte = bytes[0];
+						(byte == expected_byte)
+							.then_some(byte)
+							.ok_or_else(|| format!("expecting 0x{expected_byte:02X} but got 0x{byte:02X}"))
+					},
+				)
+			}
+		},
+		Literal::Byte(GLiteral::String(bytes)) => {
+			let bytes = syn::LitByteStr::new(bytes, Span::call_site());
+			quote! {
+				nbnf::nom::bytes::complete::tag(#bytes.as_slice())
+			}
+		},
+		Literal::Byte(GLiteral::Range { .. }) => {
+			unimplemented!("byte range literals are not supported")
+		},
 	})
 }
 
