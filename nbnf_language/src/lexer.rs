@@ -244,7 +244,6 @@ fn merge_ranges(chars: &mut HashSet<char>, ranges: &mut HashSet<RangeInclusive<c
 				}
 				if left.start() <= right.start() && right.start() <= left.end() {
 					let range = *left.start().min(right.start()) ..= *left.end().max(right.end());
-					eprintln!("merge {left:?}/{right:?} => {range:?}");
 					ranges.remove(left);
 					ranges.remove(right);
 					ranges.insert(range);
@@ -908,7 +907,6 @@ fn test_literal() {
 		literal(r#"b"\x80\xFF""#),
 		Ok(("", Literal::Byte(GLiteral::String(b"\x80\xFF".into())))),
 	);
-	_ = dbg!(literal(r#"b"\u{61}""#));
 	assert!(matches!(literal(r#"b"\u{61}""#), Err(_),));
 }
 
