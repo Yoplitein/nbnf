@@ -700,11 +700,14 @@ fn identifier(input: &str) -> PResult<&str> {
 
 fn literal(input: &str) -> PResult<Literal> {
 	let (input, is_byte_literal) = map(opt(tag("b")), |x| x.is_some()).parse(input)?;
-	
+
 	let input_start = input;
 	let (input, quote_char) = alt((char('\''), char('"'))).parse(input)?;
 	let (input, body) = fold_many1(
-		alt((escape_char(is_byte_literal), verify(anychar, |&char| char != quote_char))),
+		alt((
+			escape_char(is_byte_literal),
+			verify(anychar, |&char| char != quote_char),
+		)),
 		String::new,
 		|mut str, char| {
 			str.push(char);
@@ -734,16 +737,14 @@ fn literal(input: &str) -> PResult<Literal> {
 		fn coerce_char(char: char) -> Result<u8, std::num::TryFromIntError> {
 			u8::try_from(char as u32)
 		}
-		
+
 		let literal = match literal {
 			GLiteral::Char(c) => coerce_char(c).map(GLiteral::Char),
-			GLiteral::String(cs) => {
-				cs
-					.chars()
-					.map(coerce_char)
-					.collect::<Result<Vec<u8>, std::num::TryFromIntError>>()
-					.map(GLiteral::String)
-			},
+			GLiteral::String(cs) => cs
+				.chars()
+				.map(coerce_char)
+				.collect::<Result<Vec<u8>, std::num::TryFromIntError>>()
+				.map(GLiteral::String),
 			_ => unreachable!(),
 		};
 		let literal = match literal {
@@ -768,17 +769,20 @@ fn escape_char(is_byte_literal: bool) -> impl FnMut(&str) -> PResult<char> {
 		))
 		.parse(input)
 	}
-	
+
 	fn fail_on_unknown(input: &str) -> PResult<char> {
 		let input_start = input;
 		let (input, _) = tag("\\").parse(input)?;
 		let (_, char) = match anychar::<&str, VerboseError<&str>>.parse(input) {
 			Ok(c) => c,
-			Err(_) => nom_bail!(input_start, "found literal with no end quote and unfinished escape"),
+			Err(_) => nom_bail!(
+				input_start,
+				"found literal with no end quote and unfinished escape"
+			),
 		};
 		nom_bail!(input_start, format!("unknown escape sequence `\\{char}`"));
 	}
-	
+
 	fn char_escapes(input: &str) -> PResult<char> {
 		alt((
 			shared_escapes,
@@ -788,16 +792,11 @@ fn escape_char(is_byte_literal: bool) -> impl FnMut(&str) -> PResult<char> {
 		))
 		.parse(input)
 	}
-	
+
 	fn byte_escapes(input: &str) -> PResult<char> {
-		alt((
-			shared_escapes,
-			hex_escape(true),
-			fail_on_unknown,
-		))
-		.parse(input)
+		alt((shared_escapes, hex_escape(true), fail_on_unknown)).parse(input)
 	}
-	
+
 	if is_byte_literal {
 		byte_escapes
 	} else {
@@ -816,11 +815,7 @@ fn hex_digits(min: usize, max: usize) -> impl FnMut(&str) -> PResult<&str> {
 }
 
 fn hex_escape(is_byte_literal: bool) -> impl FnMut(&str) -> PResult<char> {
-	let max_value = if is_byte_literal {
-		0xFF
-	} else {
-		0x7F
-	};
+	let max_value = if is_byte_literal { 0xFF } else { 0x7F };
 	move |input: &str| -> PResult<char> {
 		let (input, _) = tag(r#"\x"#).parse(input)?;
 		let (input, char) = cut(map_res(hex_digits(2, 2), |str| -> AResult<char> {

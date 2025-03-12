@@ -204,7 +204,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			if top_rule.is_none() {
 				top_rule = Some(rule_name.clone());
 			}
-			
+
 			let first_type = match self.peek() {
 				Some(Token::RustSrc(_)) => {
 					let Some(Token::RustSrc(ty)) = self.pop() else {
@@ -224,15 +224,9 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				_ => None,
 			};
 			let (input_type, output_type) = match (first_type, second_type) {
-				(None, None) => {
-					("&str".into(), "&str".into())
-				},
-				(Some(out), None) => {
-					("&str".into(), out)
-				},
-				(Some(inp), Some(out)) => {
-					(inp, out)
-				},
+				(None, None) => ("&str".into(), "&str".into()),
+				(Some(out), None) => ("&str".into(), out),
+				(Some(inp), Some(out)) => (inp, out),
 				(None, Some(_)) => {
 					unreachable!()
 				},
@@ -243,7 +237,14 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			self.expect(Token::Semicolon)?;
 			ensure!(
 				rules
-					.insert(rule_name.clone(), Rule { input_type, output_type, body })
+					.insert(
+						rule_name.clone(),
+						Rule {
+							input_type,
+							output_type,
+							body
+						}
+					)
 					.is_none(),
 				"found duplicate rule {rule_name:?}"
 			);
