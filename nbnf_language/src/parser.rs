@@ -46,6 +46,12 @@ pub enum Expr {
 	Literal(Literal),
 	/// Match some other parser.
 	Rule(String),
+	/**
+		A string of Rust code evaluating to a parser.
+		
+		Used to reference e.g. custom literals, parametric parsers such as tag/take/etc.
+	*/
+	RawRule(String),
 	/// Match a group of expressions.
 	Group(Vec<Expr>),
 	/**
@@ -435,6 +441,12 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					unreachable!()
 				};
 				Expr::Rule(rule_name)
+			},
+			Token::RustSrc(_) => {
+				let Some(Token::RustSrc(code)) = self.pop() else {
+					unreachable!()
+				};
+				Expr::RawRule(code)
 			},
 			Token::Literal(_) => {
 				let Some(Token::Literal(literal)) = self.pop() else {

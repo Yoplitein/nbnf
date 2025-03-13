@@ -61,6 +61,11 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 			let rule_path = path(rule_path)?;
 			Ok(quote! { #rule_path })
 		},
+		Expr::RawRule(code) => {
+			let code: syn::Expr = syn::parse_str(&code)?;
+			// TODO: expand $nom
+			Ok(quote! { #code })
+		},
 		Expr::Group(exprs) | Expr::Alternate(exprs) => {
 			group_or_alternate(matches!(body, Expr::Group(_)), exprs)
 		},
