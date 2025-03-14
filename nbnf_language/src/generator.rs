@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{ensure, Context, Result as AResult};
 use proc_macro2::{Group, Ident, Span, TokenStream, TokenTree};
@@ -55,13 +55,14 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 }
 
 fn expr_body(body: &Expr) -> AResult<TokenStream> {
+	// FIXME: weave through stack
+	let placeholders = &Placeholders(HashMap::from_iter([
+		("nom".into(), quote! { nbnf::nom }),
+	]));
 	match body {
 		Expr::Literal(v) => literal(v),
 		Expr::Rule(code) => {
-			let code = expand_placeholders(code.clone(), &|ident| match ident {
-				"nom" => Some(quote! { nbnf::nom }),
-				_ => None,
-			});
+			let code = expand_placeholders(code.clone(), placeholders);
 			Ok(quote! { #code })
 		},
 		Expr::Group(exprs) | Expr::Alternate(exprs) => {
@@ -284,7 +285,9 @@ fn path(path: &str) -> AResult<Path> {
 	syn::parse_str(path).context("couldn't parse Rust item path")
 }
 
-fn expand_placeholders(code: TokenStream, matcher: &impl Fn(&str) -> Option<TokenStream>) -> TokenStream {
+struct Placeholders(HashMap<String, TokenStream>);
+
+fn expand_placeholders(code: TokenStream, placeholders: &Placeholders) -> TokenStream {
 	let mut new_code = TokenStream::new();
 	let mut iter = code.into_iter().peekable();
 	while let Some(tree) = iter.next() {
@@ -292,7 +295,7 @@ fn expand_placeholders(code: TokenStream, matcher: &impl Fn(&str) -> Option<Toke
 			TokenTree::Group(group) => {
 				let delimiter = group.delimiter();
 				let inner_code = group.stream();
-				let inner_code = expand_placeholders(inner_code, matcher);
+				let inner_code = expand_placeholders(inner_code, placeholders);
 				let group = Group::new(delimiter, inner_code);
 				new_code.append(group);
 				continue;
@@ -301,12 +304,12 @@ fn expand_placeholders(code: TokenStream, matcher: &impl Fn(&str) -> Option<Toke
 				let Some(TokenTree::Ident(ident)) = iter.next() else {
 					unreachable!()
 				};
-				let Some(replacement) = matcher(&ident.to_string()) else {
+				let Some(replacement) = placeholders.0.get(&ident.to_string()) else {
 					new_code.append(punct);
 					new_code.append(ident);
 					continue
 				};
-				new_code.extend(replacement);
+				new_code = quote ! { #new_code #replacement };
 			},
 			_ => new_code.append(tree),
 		}
@@ -316,23 +319,20 @@ fn expand_placeholders(code: TokenStream, matcher: &impl Fn(&str) -> Option<Toke
 
 #[test]
 fn test_expand_placeholders() {
-	fn matcher(ident: &str) -> Option<TokenStream> {
-		match ident {
-			"abc" => Some(quote! { def::ghi }),
-			"foo" => Some(quote! { bar(42) }),
-			_ => None,
-		}
-	}
+	let placeholders = &Placeholders(HashMap::from_iter([
+		("abc".into(), quote! { def::ghi }),
+		("foo".into(), quote! { bar(42) }),
+	]));
 	
 	let code = quote! { $abc::xyz };
-	let code = expand_placeholders(code, &matcher);
+	let code = expand_placeholders(code, placeholders);
 	assert_eq!(code.to_string(), quote! { def::ghi::xyz }.to_string());
 	
 	let code = quote! { foo($foo) };
-	let code = expand_placeholders(code, &matcher);
+	let code = expand_placeholders(code, placeholders);
 	assert_eq!(code.to_string(), quote! { foo(bar(42)) }.to_string());
 	
 	let code = quote! { foo($foo, $bar) };
-	let code = expand_placeholders(code, &matcher);
+	let code = expand_placeholders(code, placeholders);
 	assert_eq!(code.to_string(), quote! { foo(bar(42), $bar) }.to_string());
 }
