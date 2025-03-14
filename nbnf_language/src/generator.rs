@@ -32,6 +32,9 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
 		use nbnf::nom::Parser;
 	};
+	let placeholders = &Placeholders(HashMap::from_iter([
+		("nom".into(), quote! { nbnf::nom }),
+	]));
 
 	for rule_name in &grammar.rule_order {
 		let rule = grammar
@@ -42,29 +45,23 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 		let rule_ident = raw_ident(rule_name);
 		let input_type = &rule.input_type;
 		let output_type = &rule.output_type;
-		module = quote! {
-			#module
-
+		
+		let parser = quote! {
 			fn #rule_ident(input: #input_type) -> nbnf::nom::IResult<#input_type, #output_type> {
 				#parser.parse(input)
 			}
 		};
+		let parser = expand_placeholders(parser, placeholders);
+		module = quote! { #module #parser };
 	}
 
 	Ok(module)
 }
 
 fn expr_body(body: &Expr) -> AResult<TokenStream> {
-	// FIXME: weave through stack
-	let placeholders = &Placeholders(HashMap::from_iter([
-		("nom".into(), quote! { nbnf::nom }),
-	]));
 	match body {
 		Expr::Literal(v) => literal(v),
-		Expr::Rule(code) => {
-			let code = expand_placeholders(code.clone(), placeholders);
-			Ok(quote! { #code })
-		},
+		Expr::Rule(code) => Ok(code.clone()),
 		Expr::Group(exprs) | Expr::Alternate(exprs) => {
 			group_or_alternate(matches!(body, Expr::Group(_)), exprs)
 		},
