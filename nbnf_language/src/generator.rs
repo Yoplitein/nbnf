@@ -1,8 +1,9 @@
 use std::collections::HashSet;
+use std::str::FromStr;
 
-use anyhow::{Context, Result as AResult, ensure};
-use proc_macro2::{Ident, Span, TokenStream};
-use quote::quote;
+use anyhow::{anyhow, ensure, Context, Result as AResult};
+use proc_macro2::{Group, Ident, Span, TokenStream, TokenTree};
+use quote::{quote, TokenStreamExt};
 use syn::Path;
 
 use crate::parser::MapFunc;
@@ -62,8 +63,11 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 			Ok(quote! { #rule_path })
 		},
 		Expr::RawRule(code) => {
-			let code: syn::Expr = syn::parse_str(&code)?;
-			// TODO: expand $nom
+			let code = TokenStream::from_str(&code).map_err(|err| anyhow!("{err:?}"))?;
+			let code = expand_placeholders(code, &|ident| match ident {
+				"nom" => Some(quote! { nbnf::nom }),
+				_ => None,
+			});
 			Ok(quote! { #code })
 		},
 		Expr::Group(exprs) | Expr::Alternate(exprs) => {
@@ -286,4 +290,57 @@ fn raw_ident(ident: &str) -> Ident {
 
 fn path(path: &str) -> AResult<Path> {
 	syn::parse_str(path).context("couldn't parse Rust item path")
+}
+
+fn expand_placeholders(code: TokenStream, matcher: &impl Fn(&str) -> Option<TokenStream>) -> TokenStream {
+	let mut new_code = quote!{};
+	let mut iter = code.into_iter().peekable();
+	while let Some(tree) = iter.next() {
+		match tree {
+			TokenTree::Group(group) => {
+				let delimiter = group.delimiter();
+				let inner_code = group.stream();
+				let inner_code = expand_placeholders(inner_code, matcher);
+				let group = Group::new(delimiter, inner_code);
+				new_code.append(group);
+				continue;
+			},
+			TokenTree::Punct(punct) if punct.as_char() == '$' && matches!(iter.peek(), Some(TokenTree::Ident(_))) => {
+				let Some(TokenTree::Ident(ident)) = iter.next() else {
+					unreachable!()
+				};
+				let Some(replacement) = matcher(&ident.to_string()) else {
+					new_code.append(punct);
+					new_code.append(ident);
+					continue
+				};
+				new_code.extend(replacement);
+			},
+			_ => new_code.append(tree),
+		}
+	}
+	new_code
+}
+
+#[test]
+fn test_expand_placeholders() {
+	fn matcher(ident: &str) -> Option<TokenStream> {
+		match ident {
+			"abc" => Some(quote! { def::ghi }),
+			"foo" => Some(quote! { bar(42) }),
+			_ => None,
+		}
+	}
+	
+	let code = quote! { $abc::xyz };
+	let code = expand_placeholders(code, &matcher);
+	assert_eq!(code.to_string(), quote! { def::ghi::xyz }.to_string());
+	
+	let code = quote! { foo($foo) };
+	let code = expand_placeholders(code, &matcher);
+	assert_eq!(code.to_string(), quote! { foo(bar(42)) }.to_string());
+	
+	let code = quote! { foo($foo, $bar) };
+	let code = expand_placeholders(code, &matcher);
+	assert_eq!(code.to_string(), quote! { foo(bar(42), $bar) }.to_string());
 }
