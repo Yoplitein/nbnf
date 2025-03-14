@@ -2,8 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::iter::Peekable;
 use std::mem::discriminant;
 use std::rc::Rc;
+use std::str::FromStr;
 
-use anyhow::{Result as AResult, bail, ensure};
+use anyhow::{anyhow, bail, ensure, Result as AResult};
+use proc_macro2::TokenStream;
 
 use crate::{Literal, Token};
 
@@ -23,7 +25,7 @@ pub struct Grammar {
 	/**
 		Rule names in the order as defined in the grammar.
 
-		This is used by the generator to emit parser functions in the same order as their defining rules.
+		This is used by the generator to emit parser functions in the same order as given.
 	*/
 	pub rule_order: Vec<Rc<String>>,
 }
@@ -32,9 +34,9 @@ pub struct Grammar {
 #[derive(Clone, Debug)]
 pub struct Rule {
 	/// A string of Rust source denoting the input type expected by this rule.
-	pub input_type: String,
+	pub input_type: TokenStream,
 	/// A string of Rust source denoting the type of this rule's output.
-	pub output_type: String,
+	pub output_type: TokenStream,
 	/// The root expression of this rule.
 	pub body: Expr,
 }
@@ -45,13 +47,13 @@ pub enum Expr {
 	/// Match a literal.
 	Literal(Literal),
 	/// Match some other parser.
-	Rule(String),
+	Rule(TokenStream),
 	/**
 		A string of Rust code evaluating to a parser.
 		
 		Used to reference e.g. custom literals, parametric parsers such as tag/take/etc.
 	*/
-	RawRule(String),
+	RawRule(TokenStream),
 	/// Match a group of expressions.
 	Group(Vec<Expr>),
 	/**
@@ -120,7 +122,7 @@ pub enum Expr {
 		/// The type of mapping function to apply.
 		func: MapFunc,
 		/// The code to apply as the mapping function.
-		mapping_code: String,
+		mapping_code: TokenStream,
 	},
 }
 
@@ -237,6 +239,10 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					unreachable!()
 				},
 			};
+			let (input_type, output_type) = (
+				lex_rust_tokens(&input_type, || format!("couldn't lex rule `{rule_name}`'s input type `{input_type}`"))?,
+				lex_rust_tokens(&output_type, || format!("couldn't lex rule `{rule_name}`'s output type `{output_type}`"))?,
+			);
 
 			self.expect(Token::Equals)?;
 			let body = self.parse_expr()?;
@@ -338,6 +344,8 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					let Some(expr) = exprs.pop() else {
 						bail!("found mapping function without any expression to map")
 					};
+					
+					let mapping_code = lex_rust_tokens(&mapping_code, || format!("couldn't lex mapping code `{mapping_code}`"))?;
 					let expr = Box::new(expr);
 					let func = token.into();
 					exprs.push(Expr::Map {
@@ -437,16 +445,18 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 		};
 		Ok(match token {
 			Token::Rule(_) => {
-				let Some(Token::Rule(rule_name)) = self.pop() else {
+				let Some(Token::Rule(rule_expr)) = self.pop() else {
 					unreachable!()
 				};
-				Expr::Rule(rule_name)
+				let rule_expr = lex_rust_tokens(&rule_expr, || format!("couldn't lex rule operand `{rule_expr}`"))?;
+				Expr::Rule(rule_expr)
 			},
 			Token::RustSrc(_) => {
-				let Some(Token::RustSrc(code)) = self.pop() else {
+				let Some(Token::RustSrc(rule_expr)) = self.pop() else {
 					unreachable!()
 				};
-				Expr::RawRule(code)
+				let rule_expr = lex_rust_tokens(&rule_expr, || format!("couldn't lex raw rule operand `{rule_expr}`"))?;
+				Expr::RawRule(rule_expr)
 			},
 			Token::Literal(_) => {
 				let Some(Token::Literal(literal)) = self.pop() else {
@@ -461,4 +471,12 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			_ => bail!("expecting rule expr but got {token:?}"),
 		})
 	}
+}
+
+fn lex_rust_tokens(code: &str, context: impl FnOnce() -> String) -> AResult<TokenStream> {
+	TokenStream::from_str(code)
+	.map_err(|err| {
+			let context = context();
+			anyhow!("{context}: {err:?}")
+		})
 }

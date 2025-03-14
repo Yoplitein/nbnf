@@ -1,7 +1,6 @@
 use std::collections::HashSet;
-use std::str::FromStr;
 
-use anyhow::{anyhow, ensure, Context, Result as AResult};
+use anyhow::{ensure, Context, Result as AResult};
 use proc_macro2::{Group, Ident, Span, TokenStream, TokenTree};
 use quote::{quote, TokenStreamExt};
 use syn::Path;
@@ -41,8 +40,8 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 			.unwrap_or_else(|| unreachable!());
 		let parser = expr_body(&rule.body)?;
 		let rule_ident = raw_ident(rule_name);
-		let input_type: syn::Type = syn::parse_str(&rule.input_type)?;
-		let output_type: syn::Type = syn::parse_str(&rule.output_type)?;
+		let input_type = &rule.input_type;
+		let output_type = &rule.output_type;
 		module = quote! {
 			#module
 
@@ -58,13 +57,13 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 fn expr_body(body: &Expr) -> AResult<TokenStream> {
 	match body {
 		Expr::Literal(v) => literal(v),
-		Expr::Rule(rule_path) => {
+		/* Expr::Rule(rule_path) => {
 			let rule_path = path(rule_path)?;
 			Ok(quote! { #rule_path })
-		},
-		Expr::RawRule(code) => {
-			let code = TokenStream::from_str(&code).map_err(|err| anyhow!("{err:?}"))?;
-			let code = expand_placeholders(code, &|ident| match ident {
+		}, */
+		Expr::Rule(code) | Expr::RawRule(code) => {
+			// let code = TokenStream::from_str(&code).map_err(|err| anyhow!("{err:?}"))?;
+			let code = expand_placeholders(code.clone(), &|ident| match ident {
 				"nom" => Some(quote! { nbnf::nom }),
 				_ => None,
 			});
@@ -111,8 +110,6 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 				MapFunc::MapOpt => "nbnf::nom::combinator::map_opt",
 				MapFunc::MapRes => "nbnf::nom::combinator::map_res",
 			})?;
-			let mapping_code: syn::Expr = syn::parse_str(mapping_code)
-				.context(format!("failed to parse mapping code `{mapping_code}`"))?;
 			Ok(match func {
 				MapFunc::Value => quote! {
 					#func_ident(#mapping_code, #expr)
@@ -293,7 +290,7 @@ fn path(path: &str) -> AResult<Path> {
 }
 
 fn expand_placeholders(code: TokenStream, matcher: &impl Fn(&str) -> Option<TokenStream>) -> TokenStream {
-	let mut new_code = quote!{};
+	let mut new_code = TokenStream::new();
 	let mut iter = code.into_iter().peekable();
 	while let Some(tree) = iter.next() {
 		match tree {
