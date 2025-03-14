@@ -1,11 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{ensure, Context, Result as AResult};
+use anyhow::{ensure, Result as AResult};
 use proc_macro2::{Group, Ident, Span, TokenStream, TokenTree};
 use quote::{quote, TokenStreamExt};
-use syn::Path;
 
-use crate::parser::MapFunc;
 use crate::{Expr, GLiteral, Grammar, Literal};
 
 /**
@@ -91,26 +89,16 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 		Expr::Epsilon => Ok(quote! {
 			nbnf::nom::combinator::success(())
 		}),
-		Expr::Map {
+		Expr::Wrap {
 			expr,
-			func,
-			mapping_code,
+			wrapper,
 		} => {
 			let expr = expr_body(expr)?;
-			let func_ident = path(match func {
-				MapFunc::Value => "nbnf::nom::combinator::value",
-				MapFunc::Map => "nbnf::nom::combinator::map",
-				MapFunc::MapOpt => "nbnf::nom::combinator::map_opt",
-				MapFunc::MapRes => "nbnf::nom::combinator::map_res",
-			})?;
-			Ok(match func {
-				MapFunc::Value => quote! {
-					#func_ident(#mapping_code, #expr)
-				},
-				_ => quote! {
-					#func_ident(#expr, #mapping_code)
-				},
-			})
+			let placeholders = Placeholders(HashMap::from_iter([
+				("expr".into(), expr),
+			]));
+			let expanded = expand_placeholders(wrapper.clone(), &placeholders);
+			Ok(expanded)
 		},
 	}
 }
@@ -276,10 +264,6 @@ fn repeat(expr: &Expr, min: usize, max: Option<usize>) -> AResult<TokenStream> {
 
 fn raw_ident(ident: &str) -> Ident {
 	Ident::new_raw(ident, Span::call_site())
-}
-
-fn path(path: &str) -> AResult<Path> {
-	syn::parse_str(path).context("couldn't parse Rust item path")
 }
 
 struct Placeholders(HashMap<String, TokenStream>);

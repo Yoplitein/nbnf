@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, ensure, Result as AResult};
 use proc_macro2::TokenStream;
+use quote::quote;
 
 use crate::{Literal, Token};
 
@@ -109,43 +110,12 @@ pub enum Expr {
 		A shortcut for [success][nom::combinator::success].
 	*/
 	Epsilon,
-	/**
-		Apply a mapping function.
-
-		Wraps the inner expression with one of [value][nom::combinator::value], [map][nom::combinator::map], [map_opt][nom::combinator::map_opt], [map_res][nom::combinator::map_res].
-	*/
-	Map {
-		/// The inner expression to match.
+	/// Wrap the inner expession in arbitrary Rust code.
+	Wrap {
+		/// The expression to wrap.
 		expr: Box<Expr>,
-		/// The type of mapping function to apply.
-		func: MapFunc,
-		/// The code to apply as the mapping function.
-		mapping_code: TokenStream,
-	},
-}
-
-/// Mapping function applied by [Map][Expr::Map].
-#[derive(Clone, Debug)]
-pub enum MapFunc {
-	/// Applies [value](nom::combinator::value).
-	Value,
-	/// Applies [map](nom::combinator::map).
-	Map,
-	/// Applies [map_opt](nom::combinator::map_opt).
-	MapOpt,
-	/// Applies [map_res](nom::combinator::map_res).
-	MapRes,
-}
-
-impl From<Token> for MapFunc {
-	fn from(token: Token) -> Self {
-		match token {
-			Token::Value => Self::Value,
-			Token::Map => Self::Map,
-			Token::MapOpt => Self::MapOpt,
-			Token::MapRes => Self::MapRes,
-			_ => panic!("no MapFunc for {token:?}"),
-		}
+		/// The code wrapping the expression.
+		wrapper: TokenStream,
 	}
 }
 
@@ -330,7 +300,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					pending_modifiers.insert(token.into());
 					continue;
 				},
-				Token::Value | Token::Map | Token::MapOpt | Token::MapRes => {
+				Token::Value | Token::Map | Token::MapOpt | Token::MapRes | Token::Wrap => {
 					let Some(token) = self.pop() else {
 						unreachable!()
 					};
@@ -343,13 +313,27 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 						bail!("found mapping function without any expression to map")
 					};
 					
-					let mapping_code = lex_rust_tokens(&mapping_code, || format!("couldn't lex mapping code `{mapping_code}`"))?;
 					let expr = Box::new(expr);
-					let func = token.into();
-					exprs.push(Expr::Map {
-						func,
-						mapping_code,
+					let wrapper = lex_rust_tokens(&mapping_code, || format!("couldn't lex mapping code `{mapping_code}`"))?;
+					let wrapper = match token {
+						Token::Value => quote! {
+							$nom::combinator::value(#wrapper, $expr)
+						},
+						Token::Map => quote! {
+							$nom::combinator::map($expr, #wrapper)
+						},
+						Token::MapOpt => quote! {
+							$nom::combinator::map_opt($expr, #wrapper)
+						},
+						Token::MapRes => quote! {
+							$nom::combinator::map_res($expr, #wrapper)
+						},
+						Token::Wrap => wrapper,
+						_ => unreachable!()
+					};
+					exprs.push(Expr::Wrap {
 						expr,
+						wrapper,
 					});
 					continue;
 				},

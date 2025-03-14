@@ -57,6 +57,8 @@ pub enum Token {
 	MapOpt,
 	/// A `|!` token.
 	MapRes,
+	/// A `||` token.
+	Wrap,
 }
 
 /// Parse a grammar into a list of tokens.
@@ -119,6 +121,7 @@ fn token(input: &str) -> PResult<Token> {
 		wrap!(value(Token::Recognize, tag("~"))),
 		wrap!(value(Token::Epsilon, tag("&"))),
 		wrap!(value(Token::Value, tag("@"))),
+		wrap!(value(Token::Wrap, tag("||"))),
 		wrap!(value(Token::MapOpt, tag("|?"))),
 		wrap!(value(Token::MapRes, tag("|!"))),
 		wrap!(value(Token::Map, tag("|"))),
