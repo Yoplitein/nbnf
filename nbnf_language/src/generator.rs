@@ -32,16 +32,13 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
 		use nbnf::nom::Parser;
 	};
-	let placeholders = &Placeholders(HashMap::from_iter([
-		("nom".into(), quote! { nbnf::nom }),
-	]));
 
 	for rule_name in &grammar.rule_order {
 		let rule = grammar
 			.rules
 			.get(rule_name)
 			.unwrap_or_else(|| unreachable!());
-		let parser = expr_body(&rule.body, &placeholders)?;
+		let parser = expr_body(&rule.body)?;
 		let rule_ident = raw_ident(rule_name);
 		let input_type = &rule.input_type;
 		let output_type = &rule.output_type;
@@ -57,7 +54,11 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	Ok(module)
 }
 
-fn expr_body(body: &Expr, placeholders: &Placeholders) -> AResult<TokenStream> {
+fn expr_body(body: &Expr) -> AResult<TokenStream> {
+	// FIXME: weave through stack
+	let placeholders = &Placeholders(HashMap::from_iter([
+		("nom".into(), quote! { nbnf::nom }),
+	]));
 	match body {
 		Expr::Literal(v) => literal(v),
 		Expr::Rule(code) => {
@@ -65,27 +66,27 @@ fn expr_body(body: &Expr, placeholders: &Placeholders) -> AResult<TokenStream> {
 			Ok(quote! { #code })
 		},
 		Expr::Group(exprs) | Expr::Alternate(exprs) => {
-			group_or_alternate(matches!(body, Expr::Group(_)), exprs, placeholders)
+			group_or_alternate(matches!(body, Expr::Group(_)), exprs)
 		},
-		&Expr::Repeat { ref expr, min, max } => repeat(expr, min, max, placeholders),
+		&Expr::Repeat { ref expr, min, max } => repeat(expr, min, max),
 		Expr::Discard(_) => {
 			// discards must be handled by group_or_alternate
 			panic!("got unexpected Discard when generating expression body");
 		},
 		Expr::Not(inner) => {
-			let inner = expr_body(inner, placeholders)?;
+			let inner = expr_body(inner)?;
 			Ok(quote! {
 				nbnf::nom::combinator::not(#inner)
 			})
 		},
 		Expr::Cut(inner) => {
-			let inner = expr_body(inner, placeholders)?;
+			let inner = expr_body(inner)?;
 			Ok(quote! {
 				nbnf::nom::combinator::cut(#inner)
 			})
 		},
 		Expr::Recognize(inner) => {
-			let inner = expr_body(inner, placeholders)?;
+			let inner = expr_body(inner)?;
 			Ok(quote! {
 				nbnf::nom::combinator::recognize(#inner)
 			})
@@ -98,7 +99,7 @@ fn expr_body(body: &Expr, placeholders: &Placeholders) -> AResult<TokenStream> {
 			func,
 			mapping_code,
 		} => {
-			let expr = expr_body(expr, placeholders)?;
+			let expr = expr_body(expr)?;
 			let func_ident = path(match func {
 				MapFunc::Value => "nbnf::nom::combinator::value",
 				MapFunc::Map => "nbnf::nom::combinator::map",
@@ -188,7 +189,7 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 	})
 }
 
-fn group_or_alternate(is_group: bool, exprs: &[Expr], placeholders: &Placeholders) -> AResult<TokenStream> {
+fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
 	ensure!(
 		exprs.len() > 1,
 		"encountered invalid group/alternate with less than two elements"
@@ -203,9 +204,9 @@ fn group_or_alternate(is_group: bool, exprs: &[Expr], placeholders: &Placeholder
 		let parser = if let Expr::Discard(child) = child {
 			ensure!(is_group, "found unexpected discard of alternate case");
 			discards.insert(index);
-			expr_body(child, placeholders)?
+			expr_body(child)?
 		} else {
-			expr_body(child, placeholders)?
+			expr_body(child)?
 		};
 		seq = quote! { #seq #parser };
 	}
@@ -247,8 +248,8 @@ fn group_or_alternate(is_group: bool, exprs: &[Expr], placeholders: &Placeholder
 	Ok(seq)
 }
 
-fn repeat(expr: &Expr, min: usize, max: Option<usize>, placeholders: &Placeholders) -> AResult<TokenStream> {
-	let inner = expr_body(expr, placeholders)?;
+fn repeat(expr: &Expr, min: usize, max: Option<usize>) -> AResult<TokenStream> {
+	let inner = expr_body(expr)?;
 	Ok(match (min, max) {
 		(0, Some(1)) => quote! {
 			nbnf::nom::combinator::opt(#inner)
