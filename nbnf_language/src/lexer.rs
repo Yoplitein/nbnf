@@ -687,7 +687,7 @@ fn path(input: &str) -> PResult<String> {
 fn identifier(input: &str) -> PResult<&str> {
 	fn is_ident_char(start: bool, char: char) -> bool {
 		match char {
-			'_' => true,
+			'_' | '$' => true,
 			_ if char.is_numeric() => !start,
 			_ => char.is_alphanumeric(),
 		}
