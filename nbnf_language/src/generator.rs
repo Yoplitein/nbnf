@@ -57,12 +57,7 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 fn expr_body(body: &Expr) -> AResult<TokenStream> {
 	match body {
 		Expr::Literal(v) => literal(v),
-		/* Expr::Rule(rule_path) => {
-			let rule_path = path(rule_path)?;
-			Ok(quote! { #rule_path })
-		}, */
-		Expr::Rule(code) | Expr::RawRule(code) => {
-			// let code = TokenStream::from_str(&code).map_err(|err| anyhow!("{err:?}"))?;
+		Expr::Rule(code) => {
 			let code = expand_placeholders(code.clone(), &|ident| match ident {
 				"nom" => Some(quote! { nbnf::nom }),
 				_ => None,

@@ -46,14 +46,12 @@ pub struct Rule {
 pub enum Expr {
 	/// Match a literal.
 	Literal(Literal),
-	/// Match some other parser.
-	Rule(TokenStream),
 	/**
-		A string of Rust code evaluating to a parser.
+		An identifier naming another rule; or arbitrary Rust code evaluating to a parser.
 		
-		Used to reference e.g. custom literals, parametric parsers such as tag/take/etc.
+		Arbitrary Rust can be used to reference e.g. custom literals, parametric parsers such as tag/take/etc.
 	*/
-	RawRule(TokenStream),
+	Rule(TokenStream),
 	/// Match a group of expressions.
 	Group(Vec<Expr>),
 	/**
@@ -456,7 +454,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					unreachable!()
 				};
 				let rule_expr = lex_rust_tokens(&rule_expr, || format!("couldn't lex raw rule operand `{rule_expr}`"))?;
-				Expr::RawRule(rule_expr)
+				Expr::Rule(rule_expr)
 			},
 			Token::Literal(_) => {
 				let Some(Token::Literal(literal)) = self.pop() else {
