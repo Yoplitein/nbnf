@@ -8,6 +8,7 @@ use nom::character::complete::{anychar, char, usize};
 use nom::combinator::{complete, cut, eof, map, map_opt, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
 use nom::multi::{fold_many1, fold_many_m_n, many0, many0_count, many1_count, separated_list0, separated_list1};
+use nom::sequence::preceded;
 use nom::{Finish, Offset, Parser};
 use nom_language::error::VerboseError;
 
@@ -29,6 +30,13 @@ pub enum Token {
 	},
 	/// Rust source code.
 	RustSrc(String),
+	/// A directive modifying generator behavior.
+	Pragma {
+		/// The name of the pragma.
+		name: String,
+		/// The value(s) following the pragma, if any.
+		args: Vec<String>,
+	},
 	/// A `=` token.
 	Equals,
 	/// A `/` token.
@@ -99,6 +107,7 @@ fn token(input: &str) -> PResult<Token> {
 		wrap!(map(literal, Token::Literal)),
 		wrap!(map(path, Token::Rule)),
 		wrap!(map(rustsrc, Token::RustSrc)),
+		wrap!(pragma),
 		wrap!(literal_range),
 		wrap!(repeat),
 		wrap!(value(
@@ -677,6 +686,68 @@ fn test_rustsrc() {
 	assert_eq!(parse("< foo bar >"), Ok(("", " foo bar ")),);
 	// eventually we may want to disallow this actually
 	assert_eq!(parse("<({>"), Ok(("", "({")),);
+}
+
+fn pragma(input: &str) -> PResult<Token> {
+	fn arg_sep(input: &str) -> PResult<()> {
+		value(
+			(),
+			many1_count(alt((
+				tag(" "),
+				tag("\t"),
+			))),
+		).parse(input)
+	}
+	
+	fn arg(input: &str) -> PResult<String> {
+		alt((
+			map(identifier, str::to_string),
+			rustsrc,
+		)).parse(input)
+	}
+	
+	fn args(input: &str) -> PResult<Vec<String>> {
+		opt(preceded(
+			arg_sep,
+			separated_list1(arg_sep, arg)
+		)).map(Option::unwrap_or_default).parse(input)
+	}
+	
+	let (input, _) = tag("#").parse(input)?;
+	let (input, name) = identifier.parse(input)?;
+	let (input, args) = args.parse(input)?;
+	let (input, _) = tag("\n").parse(input)?; // hmm
+	let name = name.into();
+	Ok((input, Token::Pragma { name, args }))
+}
+
+#[test]
+fn test_pragma() {
+	let inp = "#foo\nabc";
+	assert_eq!(pragma(inp), Ok(("abc", Token::Pragma {
+		name: "foo".into(),
+		args: vec![],
+	})));
+	let inp = "#foo bar\nabc";
+	assert_eq!(pragma(inp), Ok(("abc", Token::Pragma {
+		name: "foo".into(),
+		args: vec!["bar".into()],
+	})));
+	let inp = "#foo <bar>\nabc";
+	assert_eq!(pragma(inp), Ok(("abc", Token::Pragma {
+		name: "foo".into(),
+		args: vec!["bar".into()],
+	})));
+	let inp = "#foo bar <baz>\nabc";
+	assert_eq!(pragma(inp), Ok(("abc", Token::Pragma {
+		name: "foo".into(),
+		args: vec!["bar".into(), "baz".into()],
+	})));
+	
+	let inp = "#foo";
+	assert!(pragma(inp).is_err());
+	let inp = "#foo bar";
+	assert!(pragma(inp).is_err());
 }
 
 fn path(input: &str) -> PResult<String> {
