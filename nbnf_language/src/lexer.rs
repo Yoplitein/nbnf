@@ -7,7 +7,15 @@ use nom::bytes::complete::{tag, take_while, take_while1};
 use nom::character::complete::{anychar, char, usize};
 use nom::combinator::{complete, cut, eof, map, map_opt, map_res, opt, recognize, value, verify};
 use nom::error::{ErrorKind, FromExternalError};
-use nom::multi::{fold_many1, fold_many_m_n, many0, many0_count, many1_count, separated_list0, separated_list1};
+use nom::multi::{
+	fold_many_m_n,
+	fold_many1,
+	many0,
+	many0_count,
+	many1_count,
+	separated_list0,
+	separated_list1,
+};
 use nom::sequence::preceded;
 use nom::{Finish, Offset, Parser};
 use nom_language::error::VerboseError;
@@ -573,15 +581,13 @@ fn repeat(input: &str) -> PResult<Token> {
 	fn ws(input: &str) -> PResult<()> {
 		value((), opt(whitespace)).parse(input)
 	}
-	
+
 	let (input, _) = ws.parse(input)?;
 	let (input, _) = tag("{").parse(input)?;
 	let (input, _) = ws.parse(input)?;
 	let (input, mut min) = opt(usize).parse(input)?;
-	let (input, mut max) = map(opt((ws, tag(","), ws, opt(usize))), |v| {
-		v.map(|v| v.3)
-	})
-	.parse(input)?;
+	let (input, mut max) =
+		map(opt((ws, tag(","), ws, opt(usize))), |v| v.map(|v| v.3)).parse(input)?;
 	let (input, _) = ws.parse(input)?;
 	let (input, _) = tag("}").parse(input)?;
 	let (input, _) = ws.parse(input)?;
@@ -690,29 +696,19 @@ fn test_rustsrc() {
 
 fn pragma(input: &str) -> PResult<Token> {
 	fn arg_sep(input: &str) -> PResult<()> {
-		value(
-			(),
-			many1_count(alt((
-				tag(" "),
-				tag("\t"),
-			))),
-		).parse(input)
+		value((), many1_count(alt((tag(" "), tag("\t"))))).parse(input)
 	}
-	
+
 	fn arg(input: &str) -> PResult<String> {
-		alt((
-			map(identifier, str::to_string),
-			rustsrc,
-		)).parse(input)
+		alt((map(identifier, str::to_string), rustsrc)).parse(input)
 	}
-	
+
 	fn args(input: &str) -> PResult<Vec<String>> {
-		opt(preceded(
-			arg_sep,
-			separated_list1(arg_sep, arg)
-		)).map(Option::unwrap_or_default).parse(input)
+		opt(preceded(arg_sep, separated_list1(arg_sep, arg)))
+			.map(Option::unwrap_or_default)
+			.parse(input)
 	}
-	
+
 	let (input, _) = tag("#").parse(input)?;
 	let (input, name) = identifier.parse(input)?;
 	let (input, args) = args.parse(input)?;
@@ -724,26 +720,53 @@ fn pragma(input: &str) -> PResult<Token> {
 #[test]
 fn test_pragma() {
 	let inp = "#foo\nabc";
-	assert_eq!(pragma(inp), Ok(("abc", Token::Pragma {
-		name: "foo".into(),
-		args: vec![],
-	})));
+	assert_eq!(
+		pragma(inp),
+		Ok((
+			"abc",
+			Token::Pragma {
+				name: "foo".into(),
+				args: vec![],
+			}
+		))
+	);
 	let inp = "#foo bar\nabc";
-	assert_eq!(pragma(inp), Ok(("abc", Token::Pragma {
-		name: "foo".into(),
-		args: vec!["bar".into()],
-	})));
+	assert_eq!(
+		pragma(inp),
+		Ok((
+			"abc",
+			Token::Pragma {
+				name: "foo".into(),
+				args: vec!["bar".into()],
+			}
+		))
+	);
 	let inp = "#foo <bar>\nabc";
-	assert_eq!(pragma(inp), Ok(("abc", Token::Pragma {
-		name: "foo".into(),
-		args: vec!["bar".into()],
-	})));
+	assert_eq!(
+		pragma(inp),
+		Ok((
+			"abc",
+			Token::Pragma {
+				name: "foo".into(),
+				args: vec!["bar".into()],
+			}
+		))
+	);
 	let inp = "#foo bar <baz>\nabc";
-	assert_eq!(pragma(inp), Ok(("abc", Token::Pragma {
-		name: "foo".into(),
-		args: vec!["bar".into(), "baz".into()],
-	})));
-	
+	assert_eq!(
+		pragma(inp),
+		Ok((
+			"abc",
+			Token::Pragma {
+				name: "foo".into(),
+				args: vec![
+					"bar".into(),
+					"baz".into()
+				],
+			}
+		))
+	);
+
 	let inp = "#foo";
 	assert!(pragma(inp).is_err());
 	let inp = "#foo bar";
@@ -982,7 +1005,11 @@ fn test_literal() {
 }
 
 fn whitespace(input: &str) -> PResult<()> {
-	value((), verify(take_while(char::is_whitespace), |v: &str| !v.is_empty())).parse(input)
+	value(
+		(),
+		verify(take_while(char::is_whitespace), |v: &str| !v.is_empty()),
+	)
+	.parse(input)
 }
 
 fn comments(input: &str) -> PResult<()> {
@@ -1026,37 +1053,21 @@ fn comments(input: &str) -> PResult<()> {
 }
 
 fn whitespace_and_comments(input: &str) -> PResult<()> {
-	value((), many0_count(alt((
-		whitespace,
-		comments,
-	)))).parse(input)
+	value((), many0_count(alt((whitespace, comments)))).parse(input)
 }
 
 #[test]
 fn test_comments() {
 	let input = "foo // bar";
-	assert!(
-		comments.parse(input).is_err()
-	);
+	assert!(comments.parse(input).is_err());
 	let input = "// foo\nbar";
-	assert_eq!(
-		comments.parse(input),
-		Ok(("\nbar", ())),
-	);
+	assert_eq!(comments.parse(input), Ok(("\nbar", ())),);
 	let input = "foo /* bar */";
-	assert!(
-		comments.parse(input).is_err()
-	);
+	assert!(comments.parse(input).is_err());
 	let input = "/* foo */ bar";
-	assert_eq!(
-		comments.parse(input),
-		Ok((" bar", ())),
-	);
+	assert_eq!(comments.parse(input), Ok((" bar", ())),);
 	let input = "/* /* foo */ */ bar";
-	assert_eq!(
-		comments.parse(input),
-		Ok((" bar", ())),
-	);
+	assert_eq!(comments.parse(input), Ok((" bar", ())),);
 
 	let input = r#"
 		// foo
@@ -1067,21 +1078,33 @@ fn test_comments() {
 		// mux
 	"#;
 	_ = dbg!(top(input));
-	assert_eq!(top(input), Ok(("", vec![
-		Token::Rule("a".into()),
-		Token::Equals,
-		Token::Rule("b".into()),
-		Token::Semicolon
-	])));
+	assert_eq!(
+		top(input),
+		Ok((
+			"",
+			vec![
+				Token::Rule("a".into()),
+				Token::Equals,
+				Token::Rule("b".into()),
+				Token::Semicolon
+			]
+		))
+	);
 
 	let input = r#"
 		/* 1 */ a /* 2 */ = /* 3 */ b /* 4 */;
 		/* /* 5 */ */
 	"#;
-	assert_eq!(top(input), Ok(("", vec![
-		Token::Rule("a".into()),
-		Token::Equals,
-		Token::Rule("b".into()),
-		Token::Semicolon
-	])));
+	assert_eq!(
+		top(input),
+		Ok((
+			"",
+			vec![
+				Token::Rule("a".into()),
+				Token::Equals,
+				Token::Rule("b".into()),
+				Token::Semicolon
+			]
+		))
+	);
 }

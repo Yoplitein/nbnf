@@ -4,7 +4,7 @@ use std::mem::discriminant;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use anyhow::{anyhow, bail, ensure, Result as AResult};
+use anyhow::{Result as AResult, anyhow, bail, ensure};
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -49,7 +49,7 @@ pub enum Expr {
 	Literal(Literal),
 	/**
 		An identifier naming another rule; or arbitrary Rust code evaluating to a parser.
-		
+
 		Arbitrary Rust can be used to reference e.g. custom literals, parametric parsers such as tag/take/etc.
 	*/
 	Rule(TokenStream),
@@ -116,7 +116,7 @@ pub enum Expr {
 		expr: Box<Expr>,
 		/// The code wrapping the expression.
 		wrapper: TokenStream,
-	}
+	},
 }
 
 /// Parse a list of tokens into a grammar.
@@ -208,8 +208,12 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				},
 			};
 			let (input_type, output_type) = (
-				lex_rust_tokens(&input_type, || format!("couldn't lex rule `{rule_name}`'s input type `{input_type}`"))?,
-				lex_rust_tokens(&output_type, || format!("couldn't lex rule `{rule_name}`'s output type `{output_type}`"))?,
+				lex_rust_tokens(&input_type, || {
+					format!("couldn't lex rule `{rule_name}`'s input type `{input_type}`")
+				})?,
+				lex_rust_tokens(&output_type, || {
+					format!("couldn't lex rule `{rule_name}`'s output type `{output_type}`")
+				})?,
 			);
 
 			self.expect(Token::Equals)?;
@@ -312,9 +316,11 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					let Some(expr) = exprs.pop() else {
 						bail!("found mapping function without any expression to map")
 					};
-					
+
 					let expr = Box::new(expr);
-					let wrapper = lex_rust_tokens(&mapping_code, || format!("couldn't lex mapping code `{mapping_code}`"))?;
+					let wrapper = lex_rust_tokens(&mapping_code, || {
+						format!("couldn't lex mapping code `{mapping_code}`")
+					})?;
 					let wrapper = match token {
 						Token::Value => quote! {
 							$nom::combinator::value(#wrapper, $expr)
@@ -329,12 +335,9 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 							$nom::combinator::map_res($expr, #wrapper)
 						},
 						Token::Wrap => wrapper,
-						_ => unreachable!()
+						_ => unreachable!(),
 					};
-					exprs.push(Expr::Wrap {
-						expr,
-						wrapper,
-					});
+					exprs.push(Expr::Wrap { expr, wrapper });
 					continue;
 				},
 				Token::Semicolon | Token::GroupClose => {
@@ -430,14 +433,18 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				let Some(Token::Rule(rule_expr)) = self.pop() else {
 					unreachable!()
 				};
-				let rule_expr = lex_rust_tokens(&rule_expr, || format!("couldn't lex rule operand `{rule_expr}`"))?;
+				let rule_expr = lex_rust_tokens(&rule_expr, || {
+					format!("couldn't lex rule operand `{rule_expr}`")
+				})?;
 				Expr::Rule(rule_expr)
 			},
 			Token::RustSrc(_) => {
 				let Some(Token::RustSrc(rule_expr)) = self.pop() else {
 					unreachable!()
 				};
-				let rule_expr = lex_rust_tokens(&rule_expr, || format!("couldn't lex raw rule operand `{rule_expr}`"))?;
+				let rule_expr = lex_rust_tokens(&rule_expr, || {
+					format!("couldn't lex raw rule operand `{rule_expr}`")
+				})?;
 				Expr::Rule(rule_expr)
 			},
 			Token::Literal(_) => {
@@ -456,9 +463,8 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 }
 
 fn lex_rust_tokens(code: &str, context: impl FnOnce() -> String) -> AResult<TokenStream> {
-	TokenStream::from_str(code)
-	.map_err(|err| {
-			let context = context();
-			anyhow!("{context}: {err:?}")
-		})
+	TokenStream::from_str(code).map_err(|err| {
+		let context = context();
+		anyhow!("{context}: {err:?}")
+	})
 }

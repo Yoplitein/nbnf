@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{ensure, Result as AResult};
+use anyhow::{Result as AResult, ensure};
 use proc_macro2::{Group, Ident, Span, TokenStream, TokenTree};
-use quote::{quote, TokenStreamExt};
+use quote::{TokenStreamExt, quote};
 
 use crate::{Expr, GLiteral, Grammar, Literal};
 
@@ -30,9 +30,7 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
 		use nbnf::nom::Parser;
 	};
-	let placeholders = &Placeholders(HashMap::from_iter([
-		("nom".into(), quote! { nbnf::nom }),
-	]));
+	let placeholders = &Placeholders(HashMap::from_iter([("nom".into(), quote! { nbnf::nom })]));
 
 	for rule_name in &grammar.rule_order {
 		let rule = grammar
@@ -43,7 +41,7 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 		let rule_ident = raw_ident(rule_name);
 		let input_type = &rule.input_type;
 		let output_type = &rule.output_type;
-		
+
 		let parser = quote! {
 			fn #rule_ident(input: #input_type) -> nbnf::nom::IResult<#input_type, #output_type> {
 				#parser.parse(input)
@@ -89,14 +87,9 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 		Expr::Epsilon => Ok(quote! {
 			nbnf::nom::combinator::success(())
 		}),
-		Expr::Wrap {
-			expr,
-			wrapper,
-		} => {
+		Expr::Wrap { expr, wrapper } => {
 			let expr = expr_body(expr)?;
-			let placeholders = Placeholders(HashMap::from_iter([
-				("expr".into(), expr),
-			]));
+			let placeholders = Placeholders(HashMap::from_iter([("expr".into(), expr)]));
 			let expanded = expand_placeholders(wrapper.clone(), &placeholders);
 			Ok(expanded)
 		},
@@ -281,16 +274,18 @@ fn expand_placeholders(code: TokenStream, placeholders: &Placeholders) -> TokenS
 				new_code.append(group);
 				continue;
 			},
-			TokenTree::Punct(punct) if punct.as_char() == '$' && matches!(iter.peek(), Some(TokenTree::Ident(_))) => {
+			TokenTree::Punct(punct)
+				if punct.as_char() == '$' && matches!(iter.peek(), Some(TokenTree::Ident(_))) =>
+			{
 				let Some(TokenTree::Ident(ident)) = iter.next() else {
 					unreachable!()
 				};
 				let Some(replacement) = placeholders.0.get(&ident.to_string()) else {
 					new_code.append(punct);
 					new_code.append(ident);
-					continue
+					continue;
 				};
-				new_code = quote ! { #new_code #replacement };
+				new_code = quote! { #new_code #replacement };
 			},
 			_ => new_code.append(tree),
 		}
@@ -304,15 +299,15 @@ fn test_expand_placeholders() {
 		("abc".into(), quote! { def::ghi }),
 		("foo".into(), quote! { bar(42) }),
 	]));
-	
+
 	let code = quote! { $abc::xyz };
 	let code = expand_placeholders(code, placeholders);
 	assert_eq!(code.to_string(), quote! { def::ghi::xyz }.to_string());
-	
+
 	let code = quote! { foo($foo) };
 	let code = expand_placeholders(code, placeholders);
 	assert_eq!(code.to_string(), quote! { foo(bar(42)) }.to_string());
-	
+
 	let code = quote! { foo($foo, $bar) };
 	let code = expand_placeholders(code, placeholders);
 	assert_eq!(code.to_string(), quote! { foo(bar(42), $bar) }.to_string());
