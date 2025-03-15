@@ -122,7 +122,7 @@ pub enum Expr {
 /// Parse a list of tokens into a grammar.
 pub fn parse(tokens: Vec<Token>) -> AResult<Grammar> {
 	ensure!(!tokens.is_empty());
-	let mut parser = Parser(tokens.into_iter().peekable());
+	let mut parser = Parser::new(tokens.into_iter());
 	parser.parse()
 }
 
@@ -146,15 +146,28 @@ impl From<Token> for Modifier {
 	}
 }
 
-struct Parser<Iter: Iterator>(Peekable<Iter>);
+struct Parser<Iter: Iterator> {
+	iter: Peekable<Iter>,
+	default_input_type: Option<TokenStream>,
+	default_output_type: Option<TokenStream>,
+}
 
 impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
+	fn new(iter: Iter) -> Self {
+		let iter = iter.peekable();
+		Self {
+			iter,
+			default_input_type: None,
+			default_output_type: None,
+		}
+	}
+
 	fn peek(&mut self) -> Option<&Token> {
-		self.0.peek()
+		self.iter.peek()
 	}
 
 	fn pop(&mut self) -> Option<Token> {
-		self.0.next()
+		self.iter.next()
 	}
 
 	fn expect(&mut self, expected: Token) -> AResult<Token> {
@@ -173,6 +186,11 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 		let mut top_rule = None;
 		let mut rule_order = vec![];
 		while let Some(token) = self.pop() {
+			if let Token::Pragma { name, args } = token {
+				self.handle_pragma(name, args)?;
+				continue;
+			}
+
 			let Token::Rule(rule_name) = token else {
 				bail!("expected identifier to start rule definition but got {token:?}")
 			};
@@ -186,6 +204,9 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					let Some(Token::RustSrc(ty)) = self.pop() else {
 						unreachable!()
 					};
+					let ty = lex_rust_tokens(&ty, || {
+						format!("couldn't lex rule `{rule_name}`'s type `{ty}`")
+					})?;
 					Some(ty)
 				},
 				_ => None,
@@ -195,26 +216,33 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					let Some(Token::RustSrc(ty)) = self.pop() else {
 						unreachable!()
 					};
+					let ty = lex_rust_tokens(&ty, || {
+						format!("couldn't lex rule `{rule_name}`'s type `{ty}`")
+					})?;
 					Some(ty)
 				},
 				_ => None,
 			};
 			let (input_type, output_type) = match (first_type, second_type) {
-				(None, None) => ("&str".into(), "&str".into()),
-				(Some(out), None) => ("&str".into(), out),
+				(None, None) => (
+					self.default_input_type
+						.clone()
+						.unwrap_or_else(|| quote! { &str }),
+					self.default_output_type
+						.clone()
+						.unwrap_or_else(|| quote! { &str }),
+				),
+				(Some(out), None) => (
+					self.default_input_type
+						.clone()
+						.unwrap_or_else(|| quote! { &str }),
+					out,
+				),
 				(Some(inp), Some(out)) => (inp, out),
 				(None, Some(_)) => {
 					unreachable!()
 				},
 			};
-			let (input_type, output_type) = (
-				lex_rust_tokens(&input_type, || {
-					format!("couldn't lex rule `{rule_name}`'s input type `{input_type}`")
-				})?,
-				lex_rust_tokens(&output_type, || {
-					format!("couldn't lex rule `{rule_name}`'s output type `{output_type}`")
-				})?,
-			);
 
 			self.expect(Token::Equals)?;
 			let body = self.parse_expr()?;
@@ -248,11 +276,11 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 		let mut pending_modifiers = HashSet::new();
 		let mut last_len = usize::MAX;
 		while self.peek().is_some() {
-			let len = self.0.len();
+			let len = self.iter.len();
 			if len == last_len {
 				panic!(
 					"parse_rule_body stuck in infinite loop at token {:?}",
-					self.0.peek()
+					self.iter.peek()
 				);
 			}
 			last_len = len;
@@ -459,6 +487,24 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			},
 			_ => bail!("expecting rule expr but got {token:?}"),
 		})
+	}
+
+	fn handle_pragma(&mut self, name: String, args: Vec<String>) -> AResult<()> {
+		match name.as_str() {
+			"input" | "output" => {
+				let [ty] = args.as_slice() else {
+					bail!("pragma args mismatch, expected `#{name} <ty>`")
+				};
+				let ty = lex_rust_tokens(ty, || format!("parsing argument to pragma `#{name}`"))?;
+				if name == "input" {
+					self.default_input_type = Some(ty);
+				} else {
+					self.default_output_type = Some(ty);
+				}
+			},
+			_ => bail!("unknown pragma `#{name}`"),
+		}
+		Ok(())
 	}
 }
 
