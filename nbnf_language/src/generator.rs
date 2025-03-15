@@ -41,9 +41,16 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 		let rule_ident = raw_ident(rule_name);
 		let input_type = &rule.input_type;
 		let output_type = &rule.output_type;
+		let error_type = if let Some(error_type) = &rule.error_type {
+			quote! {
+				, #error_type<#input_type>
+			}
+		} else {
+			quote!{}
+		};
 
 		let parser = quote! {
-			fn #rule_ident(input: #input_type) -> nbnf::nom::IResult<#input_type, #output_type> {
+			fn #rule_ident(input: #input_type) -> nbnf::nom::IResult<#input_type, #output_type #error_type> {
 				#parser.parse(input)
 			}
 		};

@@ -34,10 +34,12 @@ pub struct Grammar {
 /// A rule.
 #[derive(Clone, Debug)]
 pub struct Rule {
-	/// A string of Rust source denoting the input type expected by this rule.
+	/// Rust code denoting the input type expected by this rule.
 	pub input_type: TokenStream,
-	/// A string of Rust source denoting the type of this rule's output.
+	/// Rust code denoting the type of this rule's output.
 	pub output_type: TokenStream,
+	/// Rust code denoting the (uninstantiated) error type of this rule's output.
+	pub error_type: Option<TokenStream>,
 	/// The root expression of this rule.
 	pub body: Expr,
 }
@@ -150,6 +152,7 @@ struct Parser<Iter: Iterator> {
 	iter: Peekable<Iter>,
 	default_input_type: Option<TokenStream>,
 	default_output_type: Option<TokenStream>,
+	error_type: Option<TokenStream>,
 }
 
 impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
@@ -159,6 +162,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			iter,
 			default_input_type: None,
 			default_output_type: None,
+			error_type: None,
 		}
 	}
 
@@ -243,6 +247,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 					unreachable!()
 				},
 			};
+			let error_type = self.error_type.clone();
 
 			self.expect(Token::Equals)?;
 			let body = self.parse_expr()?;
@@ -254,6 +259,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 						Rule {
 							input_type,
 							output_type,
+							error_type,
 							body
 						}
 					)
@@ -491,15 +497,17 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 
 	fn handle_pragma(&mut self, name: String, args: Vec<String>) -> AResult<()> {
 		match name.as_str() {
-			"input" | "output" => {
+			"input" | "output" | "error" => {
 				let [ty] = args.as_slice() else {
 					bail!("pragma args mismatch, expected `#{name} <ty>`")
 				};
 				let ty = lex_rust_tokens(ty, || format!("parsing argument to pragma `#{name}`"))?;
 				if name == "input" {
 					self.default_input_type = Some(ty);
-				} else {
+				} else if name == "output" {
 					self.default_output_type = Some(ty);
+				} else {
+					self.error_type = Some(ty);
 				}
 			},
 			_ => bail!("unknown pragma `#{name}`"),
