@@ -38,7 +38,8 @@ pub struct Rule {
 	pub input_type: TokenStream,
 	/// Rust code denoting the type of this rule's output.
 	pub output_type: TokenStream,
-	/// Rust code denoting the (uninstantiated) error type of this rule's output.
+	/// Rust code denoting the (uninstantiated) error type of this rule's
+	/// output.
 	pub error_type: Option<TokenStream>,
 	/// The root expression of this rule.
 	pub body: Expr,
@@ -501,13 +502,21 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 				let [ty] = args.as_slice() else {
 					bail!("pragma args mismatch, expected `#{name} <ty>`")
 				};
-				let ty = lex_rust_tokens(ty, || format!("parsing argument to pragma `#{name}`"))?;
+				let new_value = match ty.as_str() {
+					"$reset" => None,
+					_ => {
+						let ty = lex_rust_tokens(ty, || {
+							format!("parsing argument to pragma `#{name}`")
+						})?;
+						Some(ty)
+					},
+				};
 				if name == "input" {
-					self.default_input_type = Some(ty);
+					self.default_input_type = new_value;
 				} else if name == "output" {
-					self.default_output_type = Some(ty);
+					self.default_output_type = new_value;
 				} else {
-					self.error_type = Some(ty);
+					self.error_type = new_value;
 				}
 			},
 			_ => bail!("unknown pragma `#{name}`"),

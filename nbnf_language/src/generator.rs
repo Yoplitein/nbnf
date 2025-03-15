@@ -46,7 +46,7 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 				, #error_type<#input_type>
 			}
 		} else {
-			quote!{}
+			quote! {}
 		};
 
 		let parser = quote! {
