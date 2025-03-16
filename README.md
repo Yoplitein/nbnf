@@ -152,6 +152,9 @@ Each pragma also allows clearing user-defined values:
 
 // placeholder `foo` is reset (to default, if any)
 #placeholder foo $reset
+
+// all user-defined placeholders are reset
+#placeholder $reset
 ```
 
 Placeholders are syntax that allow arbitrary substitutions. nbnf has a few predefined placeholders that can be overridden to alter generated parsers:
