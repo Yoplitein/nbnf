@@ -51,7 +51,7 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 		};
 
 		let parser = quote! {
-			fn #rule_ident(input: #input_type) -> nbnf::nom::IResult<#input_type, #output_type #error_type> {
+			fn #rule_ident(input: #input_type) -> $nom::IResult<#input_type, #output_type #error_type> {
 				#parser.parse(input)
 			}
 		};
@@ -83,23 +83,23 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 		Expr::Not(inner) => {
 			let inner = expr_body(inner)?;
 			Ok(quote! {
-				nbnf::nom::combinator::not(#inner)
+				$nom::combinator::not(#inner)
 			})
 		},
 		Expr::Cut(inner) => {
 			let inner = expr_body(inner)?;
 			Ok(quote! {
-				nbnf::nom::combinator::cut(#inner)
+				$nom::combinator::cut(#inner)
 			})
 		},
 		Expr::Recognize(inner) => {
 			let inner = expr_body(inner)?;
 			Ok(quote! {
-				nbnf::nom::combinator::recognize(#inner)
+				$nom::combinator::recognize(#inner)
 			})
 		},
 		Expr::Epsilon => Ok(quote! {
-			nbnf::nom::combinator::success(())
+			$nom::combinator::success(())
 		}),
 		Expr::Wrap { expr, wrapper } => {
 			let expr = expr_body(expr)?;
@@ -113,10 +113,10 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 fn literal(literal: &Literal) -> AResult<TokenStream> {
 	Ok(match literal {
 		Literal::Char(GLiteral::Char(char)) => quote! {
-			nbnf::nom::character::complete::char(#char)
+			$nom::character::complete::char(#char)
 		},
 		Literal::Char(GLiteral::String(str)) => quote! {
-			nbnf::nom::bytes::complete::tag(#str)
+			$nom::bytes::complete::tag(#str)
 		},
 		&Literal::Char(GLiteral::Range {
 			ref chars,
@@ -144,8 +144,8 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 				quote! {}
 			};
 			quote! {
-				nbnf::nom::combinator::verify(
-					nbnf::nom::character::complete::anychar,
+				$nom::combinator::verify(
+					$nom::character::complete::anychar,
 					|&char: &char| #invert match char {
 						#patterns => true,
 						_ => false,
@@ -156,8 +156,8 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 		Literal::Byte(GLiteral::Char(byte)) => {
 			// nom doesn't seem to have a byte equivalent of `char(_)`
 			quote! {
-				nbnf::nom::combinator::map_res(
-					nbnf::nom::bytes::complete::take(1usize),
+				$nom::combinator::map_res(
+					$nom::bytes::complete::take(1usize),
 					|bytes: &[u8]| {
 						let expected_byte = #byte;
 						assert!(bytes.len() == 1, "take(1usize) unexpectedly returned {} bytes", bytes.len());
@@ -172,7 +172,7 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 		Literal::Byte(GLiteral::String(bytes)) => {
 			let bytes = syn::LitByteStr::new(bytes, Span::call_site());
 			quote! {
-				nbnf::nom::bytes::complete::tag(#bytes.as_slice())
+				$nom::bytes::complete::tag(#bytes.as_slice())
 			}
 		},
 		Literal::Byte(GLiteral::Range { .. }) => {
@@ -207,7 +207,7 @@ fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
 		seq = quote! { (#seq) };
 	} else {
 		seq = quote! {
-			nbnf::nom::branch::alt((#seq))
+			$nom::branch::alt((#seq))
 		};
 	}
 
@@ -233,7 +233,7 @@ fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
 			}
 		}
 		quote! {
-			nbnf::nom::combinator::map(#seq, |(#argument)| (#output))
+			$nom::combinator::map(#seq, |(#argument)| (#output))
 		}
 	};
 
@@ -244,25 +244,25 @@ fn repeat(expr: &Expr, min: usize, max: Option<usize>) -> AResult<TokenStream> {
 	let inner = expr_body(expr)?;
 	Ok(match (min, max) {
 		(0, Some(1)) => quote! {
-			nbnf::nom::combinator::opt(#inner)
+			$nom::combinator::opt(#inner)
 		},
 		(1, Some(1)) => inner,
 		(min, Some(max)) => quote! {
-			nbnf::nom::multi::many_m_n(
+			$nom::multi::many_m_n(
 				#min,
 				#max,
 				#inner,
 			)
 		},
 		(0, None) => quote! {
-			nbnf::nom::multi::many0(#inner)
+			$nom::multi::many0(#inner)
 		},
 		(1, None) => quote! {
-			nbnf::nom::multi::many1(#inner)
+			$nom::multi::many1(#inner)
 		},
 		(min, None) => quote! {
-			nbnf::nom::combinator::verify(
-				nbnf::nom::multi::many0(#inner),
+			$nom::combinator::verify(
+				$nom::multi::many0(#inner),
 				|xs: Vec<_>| xs.len() >= #min,
 			)
 		},
