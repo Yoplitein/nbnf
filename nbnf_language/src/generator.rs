@@ -30,8 +30,10 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
 		use nbnf::nom::Parser;
 	};
-	let default_placeholders =
-		Placeholders(HashMap::from_iter([("nom".into(), quote! { nbnf::nom })]));
+	let default_placeholders = Placeholders(HashMap::from_iter([
+		("nom".into(), quote! { nbnf::nom }),
+		("complete_or_streaming".into(), quote! { complete }),
+	]));
 
 	for rule_name in &grammar.rule_order {
 		let rule = grammar
@@ -113,10 +115,10 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 fn literal(literal: &Literal) -> AResult<TokenStream> {
 	Ok(match literal {
 		Literal::Char(GLiteral::Char(char)) => quote! {
-			$nom::character::complete::char(#char)
+			$nom::character::$complete_or_streaming::char(#char)
 		},
 		Literal::Char(GLiteral::String(str)) => quote! {
-			$nom::bytes::complete::tag(#str)
+			$nom::bytes::$complete_or_streaming::tag(#str)
 		},
 		&Literal::Char(GLiteral::Range {
 			ref chars,
@@ -145,7 +147,7 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 			};
 			quote! {
 				$nom::combinator::verify(
-					$nom::character::complete::anychar,
+					$nom::character::$complete_or_streaming::anychar,
 					|&char: &char| #invert match char {
 						#patterns => true,
 						_ => false,
@@ -157,7 +159,7 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 			// nom doesn't seem to have a byte equivalent of `char(_)`
 			quote! {
 				$nom::combinator::map_res(
-					$nom::bytes::complete::take(1usize),
+					$nom::bytes::$complete_or_streaming::take(1usize),
 					|bytes: &[u8]| {
 						let expected_byte = #byte;
 						assert!(bytes.len() == 1, "take(1usize) unexpectedly returned {} bytes", bytes.len());
@@ -172,7 +174,7 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 		Literal::Byte(GLiteral::String(bytes)) => {
 			let bytes = syn::LitByteStr::new(bytes, Span::call_site());
 			quote! {
-				$nom::bytes::complete::tag(#bytes.as_slice())
+				$nom::bytes::$complete_or_streaming::tag(#bytes.as_slice())
 			}
 		},
 		Literal::Byte(GLiteral::Range { .. }) => {
