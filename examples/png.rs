@@ -20,21 +20,26 @@ fn main() -> AResult<()> {
 	Ok(())
 }
 
-nbnf!(
-	r#"
-	png<&[u8]><PNG> =
+#[rustfmt::skip]
+nbnf!(r#"
+	#input <&[u8]>
+
+	png<PNG> =
 		(-signature header chunks)
 		|<|(header, chunks)| PNG { header, chunks }>;
-	signature<&[u8]><()> = -b"\x89PNG\r\n\x1A\n" &;
-	header<&[u8]><Header> = (
+	signature<()> = -b"\x89PNG\r\n\x1A\n" &;
+	header<Header> = (
 		-b"\x00\x00\x00\x0DIHDR"
-		u32be u32be
-		u8 u8 u8 u8 u8
-		-u32be
+		u32be u32be // width and height
+		u8 // bit depth
+		u8 // color type
+		u8 // compression method
+		u8 // filter method
+		u8 // interlace method
+		-u32be // crc
 	)|!<construct_header>;
-	chunks<&[u8]><Vec<Chunk>> = chunk+;
-"#
-);
+	chunks<Vec<Chunk>> = chunk+;
+"#);
 
 fn chunk(input: &[u8]) -> nom::IResult<&[u8], Chunk> {
 	let (input, body_len) = u32be.parse(input)?;

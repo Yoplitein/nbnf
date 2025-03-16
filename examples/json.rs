@@ -4,9 +4,7 @@ use std::str::FromStr;
 use nbnf::nbnf;
 use nbnf::nom::IResult;
 use nbnf::nom::bytes::complete::take_while;
-use nbnf::nom::bytes::tag;
 use nbnf::nom::combinator::value;
-use nbnf::nom::multi::separated_list0;
 
 fn main() {
 	let input = r#"[1, 2.3, "four", {"five": false, "six": 7}, null, "abc \"def\" ghi\n"]"#;
@@ -39,7 +37,7 @@ nbnf!(r#"
 		string|<Json::String> /
 		array /
 		object /
-		nbnf::nom::combinator::eof@<Json::Null>;
+		$nom::combinator::eof@<Json::Null>;
 
 	null<Json> = "null"@<Json::Null>;
 	boolean<Json> =
@@ -70,25 +68,20 @@ nbnf!(r#"
 		"\\0"@<'\0'> /
 		"\\"@<'\\'> /
 		[^"];
-
+	
+	comma = ",";
 	array<Json> =
 		(-'[' array_inner -']')
 		|<Json::Array>;
+	array_inner<Vec<Json>> = <$nom::multi::separated_list0(comma, json)>;
 
 	object<Json> =
 		(-'{' object_inner -'}')
 		|<HashMap::from_iter>
 		|<Json::Object>;
+	object_inner<Vec<(String, Json)>> = <$nom::multi::separated_list0(comma, object_pair)>;
 	object_pair<(String, Json)> = -ws string -ws -':' -ws json -ws;
 "#);
-
-fn array_inner(input: &str) -> IResult<&str, Vec<Json>> {
-	separated_list0(tag(","), json).parse(input)
-}
-
-fn object_inner(input: &str) -> IResult<&str, Vec<(String, Json)>> {
-	separated_list0(tag(","), object_pair).parse(input)
-}
 
 fn ws(input: &str) -> IResult<&str, ()> {
 	value((), take_while(char::is_whitespace)).parse(input)
