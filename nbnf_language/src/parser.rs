@@ -41,6 +41,9 @@ pub struct Rule {
 	/// Rust code denoting the (uninstantiated) error type of this rule's
 	/// output.
 	pub error_type: Option<TokenStream>,
+	/// A set of user-defined placeholders to be applied in the body of this
+	/// rule.
+	pub placeholders: HashMap<String, TokenStream>,
 	/// The root expression of this rule.
 	pub body: Expr,
 }
@@ -154,6 +157,7 @@ struct Parser<Iter: Iterator> {
 	default_input_type: Option<TokenStream>,
 	default_output_type: Option<TokenStream>,
 	error_type: Option<TokenStream>,
+	placeholders: HashMap<String, TokenStream>,
 }
 
 impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
@@ -164,6 +168,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			default_input_type: None,
 			default_output_type: None,
 			error_type: None,
+			placeholders: HashMap::new(),
 		}
 	}
 
@@ -253,6 +258,7 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 			self.expect(Token::Equals)?;
 			let body = self.parse_expr()?;
 			self.expect(Token::Semicolon)?;
+			let placeholders = self.placeholders.clone();
 			ensure!(
 				rules
 					.insert(
@@ -261,7 +267,8 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 							input_type,
 							output_type,
 							error_type,
-							body
+							placeholders,
+							body,
 						}
 					)
 					.is_none(),
@@ -496,30 +503,54 @@ impl<Iter: Iterator<Item = Token> + ExactSizeIterator> Parser<Iter> {
 		})
 	}
 
-	fn handle_pragma(&mut self, name: String, args: Vec<String>) -> AResult<()> {
-		match name.as_str() {
+	fn handle_pragma(&mut self, pragma_name: String, args: Vec<String>) -> AResult<()> {
+		match pragma_name.as_str() {
 			"input" | "output" | "error" => {
 				let [ty] = args.as_slice() else {
-					bail!("pragma args mismatch, expected `#{name} <ty>`")
+					bail!("pragma args mismatch, expected `#{pragma_name} <ty>`")
 				};
 				let new_value = match ty.as_str() {
 					"$reset" => None,
 					_ => {
 						let ty = lex_rust_tokens(ty, || {
-							format!("parsing argument to pragma `#{name}`")
+							format!("parsing argument to pragma `#{pragma_name}`")
 						})?;
 						Some(ty)
 					},
 				};
-				if name == "input" {
+				if pragma_name == "input" {
 					self.default_input_type = new_value;
-				} else if name == "output" {
+				} else if pragma_name == "output" {
 					self.default_output_type = new_value;
 				} else {
 					self.error_type = new_value;
 				}
 			},
-			_ => bail!("unknown pragma `#{name}`"),
+			"placeholder" => {
+				let (name, expr) = match args.as_slice() {
+					[name] if name == "$reset" => {
+						self.placeholders.clear();
+						return Ok(());
+					},
+					[name, expr] if expr == "$reset" => {
+						self.placeholders.remove(name);
+						return Ok(());
+					},
+					[name, expr] => {
+						let name = name.clone();
+						let expr = lex_rust_tokens(expr, || {
+							format!("parsing argument to pragma `#{pragma_name}`")
+						})?;
+						(name, expr)
+					},
+					_ => bail!(
+						"pragma args mismatch, expected `#{pragma_name} <name> <expr>`, \
+						 `#{pragma_name} <name> $reset`, or `#{pragma_name} $reset`"
+					),
+				};
+				self.placeholders.insert(name, expr);
+			},
+			_ => bail!("unknown pragma `#{pragma_name}`"),
 		}
 		Ok(())
 	}

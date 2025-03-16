@@ -30,7 +30,8 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 	let mut module = quote! {
 		use nbnf::nom::Parser;
 	};
-	let placeholders = &Placeholders(HashMap::from_iter([("nom".into(), quote! { nbnf::nom })]));
+	let default_placeholders =
+		Placeholders(HashMap::from_iter([("nom".into(), quote! { nbnf::nom })]));
 
 	for rule_name in &grammar.rule_order {
 		let rule = grammar
@@ -54,7 +55,13 @@ pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
 				#parser.parse(input)
 			}
 		};
-		let parser = expand_placeholders(parser, placeholders);
+		let mut placeholders = default_placeholders.clone();
+		placeholders.0.extend(
+			rule.placeholders
+				.iter()
+				.map(|(name, expr)| (name.clone(), expr.clone())),
+		);
+		let parser = expand_placeholders(parser, &placeholders);
 		module = quote! { #module #parser };
 	}
 
@@ -266,6 +273,7 @@ fn raw_ident(ident: &str) -> Ident {
 	Ident::new_raw(ident, Span::call_site())
 }
 
+#[derive(Clone)]
 struct Placeholders(HashMap<String, TokenStream>);
 
 fn expand_placeholders(code: TokenStream, placeholders: &Placeholders) -> TokenStream {
