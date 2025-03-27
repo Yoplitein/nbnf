@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use anyhow::{Result as AResult, ensure};
 use proc_macro2::{Group, Ident, Span, TokenStream, TokenTree};
@@ -74,12 +74,11 @@ fn expr_body(body: &Expr) -> AResult<TokenStream> {
 	match body {
 		Expr::Literal(v) => literal(v),
 		Expr::Rule(code) => Ok(code.clone()),
-		Expr::Group(exprs) | Expr::Alternate(exprs) => {
-			group_or_alternate(matches!(body, Expr::Group(_)), exprs)
-		},
+		Expr::Group(exprs) => group(exprs),
+		Expr::Alternate(exprs) => alternate(exprs),
 		&Expr::Repeat { ref expr, min, max } => repeat(expr, min, max),
 		Expr::Discard(_) => {
-			// discards must be handled by group_or_alternate
+			// discards must be handled by `group``
 			panic!("got unexpected Discard when generating expression body");
 		},
 		Expr::Not(inner) => {
@@ -183,62 +182,67 @@ fn literal(literal: &Literal) -> AResult<TokenStream> {
 	})
 }
 
-fn group_or_alternate(is_group: bool, exprs: &[Expr]) -> AResult<TokenStream> {
+fn group(exprs: &[Expr]) -> AResult<TokenStream> {
 	ensure!(
 		exprs.len() > 1,
-		"encountered invalid group/alternate with less than two elements"
+		"encountered invalid group with less than two elements"
 	);
+	
+	let mut body = quote! {};
+	let mut outputs = quote! {};
+	for (index, expr) in exprs.iter().enumerate() {
+		let (expr, discard) = match expr {
+			Expr::Discard(expr) => (expr.as_ref(), true),
+			_ => (expr, false),
+		};
+		let expr = expr_body(expr)?;
+		
+		let output_name = if discard {
+			"_"
+		} else {
+			&format!("out{index}")
+		};
+		let output_name = Ident::new(output_name, Span::call_site());
+		
+		body = quote! {
+			#body
+			let (input, #output_name) = #expr.parse(input)?;
+		};
+		
+		if discard {
+			continue;
+		}
+		if !outputs.is_empty() {
+			outputs = quote! { #outputs, };
+		}
+		outputs = quote! { #outputs #output_name };
+	}
+	
+	body = quote! {
+		(|input| {
+			#body
+			Ok((input, (#outputs)))
+		})
+	};
+	Ok(body)
+}
 
-	let mut discards = HashSet::new();
+fn alternate(exprs: &[Expr]) -> AResult<TokenStream> {
+	ensure!(
+		exprs.len() > 1,
+		"encountered invalid alternate with less than two elements"
+	);
 	let mut seq = quote! {};
-	for (index, child) in exprs.into_iter().enumerate() {
+	for child in exprs {
 		if !seq.is_empty() {
 			seq = quote! { #seq, };
 		}
-		let parser = if let Expr::Discard(child) = child {
-			ensure!(is_group, "found unexpected discard of alternate case");
-			discards.insert(index);
-			expr_body(child)?
-		} else {
-			expr_body(child)?
-		};
-		seq = quote! { #seq #parser };
+		let parser = expr_body(child)?;
+		seq = quote! { #seq |input| #parser.parse(input) };
 	}
-
-	if is_group {
-		seq = quote! { (#seq) };
-	} else {
-		seq = quote! {
-			$nom::branch::alt((#seq))
-		};
-	}
-
-	let seq = if discards.is_empty() {
-		seq
-	} else {
-		let mut argument = quote! {};
-		let mut output = quote! {};
-		for index in 0 .. exprs.len() {
-			if !argument.is_empty() {
-				argument = quote! { #argument, };
-			}
-			if discards.contains(&index) {
-				argument = quote! { #argument _ };
-			} else {
-				if !output.is_empty() {
-					output = quote! { #output, };
-				}
-
-				let param = quote::format_ident!("p{index}");
-				argument = quote! { #argument #param };
-				output = quote! { #output #param };
-			}
-		}
-		quote! {
-			$nom::combinator::map(#seq, |(#argument)| (#output))
-		}
+	seq = quote! {
+		$nom::branch::alt([#seq])
 	};
-
 	Ok(seq)
 }
 
