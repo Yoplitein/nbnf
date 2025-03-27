@@ -18,7 +18,7 @@ use nom::multi::{
 };
 use nom::sequence::preceded;
 use nom::{Finish, Offset, Parser};
-use nom_language::error::{convert_error, VerboseError};
+use nom_language::error::{VerboseError, convert_error};
 
 use crate::{GLiteral, Literal};
 

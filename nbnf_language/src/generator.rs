@@ -192,7 +192,7 @@ fn group(exprs: &[Expr]) -> AResult<TokenStream> {
 		exprs.len() > 1,
 		"encountered invalid group with less than two elements"
 	);
-	
+
 	let mut body = quote! {};
 	let mut outputs = quote! {};
 	for (index, expr) in exprs.iter().enumerate() {
@@ -201,19 +201,15 @@ fn group(exprs: &[Expr]) -> AResult<TokenStream> {
 			_ => (expr, false),
 		};
 		let expr = expr_body(expr)?;
-		
-		let output_name = if discard {
-			"_"
-		} else {
-			&format!("out{index}")
-		};
+
+		let output_name = if discard { "_" } else { &format!("out{index}") };
 		let output_name = Ident::new(output_name, Span::call_site());
-		
+
 		body = quote! {
 			#body
 			let (input, #output_name) = #expr.parse(input)?;
 		};
-		
+
 		if discard {
 			continue;
 		}
@@ -222,7 +218,7 @@ fn group(exprs: &[Expr]) -> AResult<TokenStream> {
 		}
 		outputs = quote! { #outputs #output_name };
 	}
-	
+
 	body = quote! {
 		(|input| {
 			#body
