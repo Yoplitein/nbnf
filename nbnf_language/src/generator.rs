@@ -27,13 +27,18 @@ pub fn generate_parser(grammar: &Grammar) -> AResult<String> {
 	Generate a `TokenStream` with implementations for the given grammar.
 */
 pub fn generate_parser_tokens(grammar: &Grammar) -> AResult<TokenStream> {
-	let mut module = quote! {
-		use nbnf::nom::Parser;
-	};
 	let default_placeholders = Placeholders(HashMap::from_iter([
 		("nom".into(), quote! { nbnf::nom }),
 		("complete_or_streaming".into(), quote! { complete }),
 	]));
+
+	let top_rule = grammar.rules.get(&grammar.top_rule).unwrap();
+	let nom_path = if let Some(v) = top_rule.placeholders.get("nom") {
+		v
+	} else {
+		default_placeholders.0.get("nom").unwrap()
+	};
+	let mut module = quote! { use #nom_path::Parser as _; };
 
 	for rule_name in &grammar.rule_order {
 		let rule = grammar
