@@ -168,7 +168,7 @@ fn literal_range(input: &str) -> PResult<Token> {
 	fn char(input: &str) -> PResult<CharOrRange> {
 		verify(
 			alt((
-				bracket_escape,
+				escapes,
 				map(escape_char(false), CharOrRange::Char),
 				map(verify(anychar, |&char| char != ']'), CharOrRange::Char),
 			)),
@@ -177,8 +177,13 @@ fn literal_range(input: &str) -> PResult<Token> {
 		.parse(input)
 	}
 
-	fn bracket_escape(input: &str) -> PResult<CharOrRange> {
-		value(CharOrRange::Char(']'), tag(r"\]")).parse(input)
+	fn escapes(input: &str) -> PResult<CharOrRange> {
+		alt((
+			value(CharOrRange::Char(']'), tag(r"\]")),
+			value(CharOrRange::Char('-'), tag(r"\-")),
+			value(CharOrRange::Char('\\'), tag(r"\\")),
+		))
+		.parse(input)
 	}
 
 	fn range(input: &str) -> PResult<CharOrRange> {
@@ -197,7 +202,7 @@ fn literal_range(input: &str) -> PResult<Token> {
 	let (input, invert) = opt(tag("^")).parse(input)?;
 	let invert = invert.is_some();
 
-	let (input, chars_and_ranges) = many0(alt((ws, range, bracket_escape, char))).parse(input)?;
+	let (input, chars_and_ranges) = many0(alt((ws, range, escapes, char))).parse(input)?;
 	let mut chars = HashSet::new();
 	let mut ranges = HashSet::new();
 	for v in chars_and_ranges {
@@ -370,6 +375,20 @@ fn test_literal_range() {
 			Token::Literal(
 				GLiteral::Range {
 					chars: HashSet::from_iter([']']),
+					ranges: HashSet::new(),
+					invert: false,
+				}
+				.into()
+			)
+		)),
+	);
+	assert_eq!(
+		literal_range(r"[\-]"),
+		Ok((
+			"",
+			Token::Literal(
+				GLiteral::Range {
+					chars: HashSet::from_iter(['-']),
 					ranges: HashSet::new(),
 					invert: false,
 				}
