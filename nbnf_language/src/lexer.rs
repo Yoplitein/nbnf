@@ -18,7 +18,7 @@ use nom::multi::{
 };
 use nom::sequence::preceded;
 use nom::{Finish, Offset, Parser};
-use nom_language::error::VerboseError;
+use nom_language::error::{convert_error, VerboseError};
 
 use crate::{GLiteral, Literal};
 
@@ -78,9 +78,12 @@ pub enum Token {
 }
 
 /// Parse a grammar into a list of tokens.
-pub fn lex(input: &str) -> anyhow::Result<Vec<Token>> {
+pub fn lex(input: &str) -> AResult<Vec<Token>> {
 	let res = complete(top).parse(input).finish();
-	let res = res.map_err(|err| anyhow::anyhow!("{err:#?}"));
+	let res = res.map_err(|err| {
+		let err_str = convert_error(input, err);
+		anyhow::anyhow!("{err_str}")
+	});
 	let (_, res) = res?;
 	Ok(res)
 }
